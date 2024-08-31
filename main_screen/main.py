@@ -5,6 +5,8 @@ import os
 # dodana putanja do ostalih datoteka
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+from helper.helper_methods import load_and_resize_image
+
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
@@ -12,13 +14,7 @@ import sqlite3
 import chess.pgn
 import chess_board
 import config
-
-# Upravljanje slikama
-def load_and_resize_image(path, size):
-    """Loads an image from a given path and resizes it to the given size."""
-    image = Image.open(path)
-    image = image.resize(size, Image.LANCZOS)
-    return image  # PIL.Image objekt
+import playVsComputerSetupScreen
 
 # UI komponente
 def create_appbar(root):
@@ -46,8 +42,10 @@ def create_vertical_line(parent_frame, color="#660000"):
 def create_play_vs_computer_button(parent_frame):
     button_frame = tk.Frame(parent_frame, bg="#660000", padx=4, pady=4)
     button_frame.pack(side="left", padx=10)
-    playVsComputer_btn = tk.Button(button_frame, text="Play vs Computer", bg=config.button_color, fg=config.button_text_color, font=config.button_font, height=2, width=20, bd=0)
+
+    playVsComputer_btn = tk.Button(button_frame, text="Play vs Computer", bg=config.button_color, fg=config.button_text_color, font=config.button_font, height=2, width=20, bd=0, command=playVsComputerSetupScreen.open_play_vs_computer_window)
     playVsComputer_btn.pack()
+    
     return playVsComputer_btn
 
 def create_icon_with_label(parent_frame, image_path, image_size, text):

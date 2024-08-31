@@ -15,15 +15,10 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import config
+from helper.helper_methods import board_to_image
 
 def connect_to_database():
     return sqlite3.connect('chess_db.sqlite')
-
-def board_to_image(board, size):  
-    svg_data = chess.svg.board(board=board, size=size)
-    output_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/assets/chessboard.png"
-    cairosvg.svg2png(bytestring=svg_data, write_to=output_path)
-    return output_path
 
 def open_game_window(game_id):
     conn = connect_to_database()
@@ -63,14 +58,14 @@ def open_game_window(game_id):
     board_image = ImageTk.PhotoImage(image=Image.open(board_image_path))
     board_label = tk.Label(board_frame, image=board_image)
     board_label.image = board_image
-    board_label.pack()
+    board_label.pack(expand=True)
 
     info_frame = tk.Frame(new_window, bg="#F8E7BB", width=int(screen_width * 0.35), relief="flat", bd=10)
     info_frame.pack(side="right", fill="y", expand=False, padx=0, pady=0)
     
     info_text = f"{white} {white_elo} - {black} {black_elo}\n{result}\n\n"
-    info_label = tk.Label(info_frame, text=info_text, bg="#F8E7BB", font=("Inter", 16), anchor="center")
-    info_label.pack(side="top", pady=10, padx=10) 
+    info_label = tk.Label(info_frame, text=info_text, bg="#F8E7BB", font=("Inter", 24, "bold"), anchor="center")
+    info_label.pack(side="top", padx=10) 
 
     notation_text = tk.Text(info_frame, bg="#F8E7BB", wrap="word", font=("Inter", 16), bd=0, relief="flat")
     notation_text.insert("1.0", notation)
@@ -78,7 +73,7 @@ def open_game_window(game_id):
     notation_text.pack(side="top", fill="both", expand=True)
 
     nav_frame = tk.Frame(info_frame, bg="#F8E7BB")
-    nav_frame.pack(side="bottom", pady=20)
+    nav_frame.pack(side="bottom", padx=20)
 
     def prev_move():
         nonlocal current_move_index
