@@ -1,3 +1,4 @@
+import io
 import sys
 import os
 
@@ -9,6 +10,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import sqlite3
 import chess.pgn
+import chess_board
 import config
 
 # Upravljanje slikama
@@ -66,19 +68,20 @@ def connect_to_database():
 
 def save_batch_to_database(cursor, games_batch):
     insert_query = '''
-        INSERT INTO games (site, date, round, white, black, result, white_elo, black_elo, eco, event_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO games (site, date, round, white, black, result, white_elo, black_elo, eco, event_date, notation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     '''
     data_to_insert = [
         (
             game['Site'], game['Date'], game['Round'], 
             game['White'], game['Black'], game['Result'], 
             game['WhiteElo'], game['BlackElo'], 
-            game['ECO'], game['EventDate']
+            game['ECO'], game['EventDate'], game['Notation']
         )
         for game in games_batch
     ]
     cursor.executemany(insert_query, data_to_insert)
+
 
 def parse_pgn_and_store_in_db(pgn_file_path, batch_size=1000):
     conn = connect_to_database()
@@ -96,16 +99,18 @@ def parse_pgn_and_store_in_db(pgn_file_path, batch_size=1000):
             white_elo INTEGER,
             black_elo INTEGER,
             eco TEXT,   
-            event_date TEXT
+            event_date TEXT,
+            notation TEXT
         )
     ''')
 
     games_batch = []
     with open(pgn_file_path, "r", encoding="ISO-8859-1") as pgn_file:
-        while True:
-            game = chess.pgn.read_game(pgn_file)
-            if game is None:
-                break
+        game = chess.pgn.read_game(pgn_file)
+        while game:
+            # Pravilno dobivanje notacije u PGN formatu
+            exporter = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
+            notation = game.accept(exporter)
 
             game_data = {
                 "Site": game.headers.get("Site", ""),
@@ -117,7 +122,8 @@ def parse_pgn_and_store_in_db(pgn_file_path, batch_size=1000):
                 "WhiteElo": game.headers.get("WhiteElo", ""),
                 "BlackElo": game.headers.get("BlackElo", ""),
                 "ECO": game.headers.get("ECO", ""),
-                "EventDate": game.headers.get("EventDate", "")
+                "EventDate": game.headers.get("EventDate", ""),
+                "Notation": notation.strip()
             }
 
             games_batch.append(game_data)
@@ -125,6 +131,9 @@ def parse_pgn_and_store_in_db(pgn_file_path, batch_size=1000):
             if len(games_batch) >= batch_size:
                 save_batch_to_database(cursor, games_batch)
                 games_batch = []
+
+            # Čitaj sledeću partiju
+            game = chess.pgn.read_game(pgn_file)
 
         if games_batch:
             save_batch_to_database(cursor, games_batch)
@@ -152,9 +161,17 @@ def display_data(table_frame):
     tree.heading("Result", text="Result")
     tree.heading("Site", text="Site")
     tree.heading("Date", text="Date")
-    for i, (game_id, site, date, round, white, black, result, white_elo, black_elo, eco, event_date) in enumerate(data):
+    for i, (game_id, site, date, round, white, black, result, white_elo, black_elo, eco, event_date, notation) in enumerate(data):
         tree.insert("", "end", values=(game_id, white, white_elo, black, black_elo, result, site, date))
     tree.pack(side="top", fill="x")
+
+    def on_item_click(event):
+        selected_item = tree.selection()[0]
+        values = tree.item(selected_item, "values")
+        game_id = values[0]
+        chess_board.open_game_window(game_id)
+
+    tree.bind("<Double-1>", on_item_click)
 
 def create_icon_with_table_button(content_frame, table_frame, image_path, image_size, text):
     icon_image = load_and_resize_image(image_path, image_size)
