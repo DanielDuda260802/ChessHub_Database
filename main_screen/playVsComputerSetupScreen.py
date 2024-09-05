@@ -165,23 +165,45 @@ def open_play_vs_computer_window():
                                      highlightthickness=2, highlightbackground="#660000", highlightcolor="#660000")
     black_increment_entry.grid(row=0, column=3, padx=5)
 
+    # Level Label
     level_label = tk.Label(play_window, text="Level:", bg="#F8E7BB", font=("Inter", 40))
-    level_label.pack(pady=20)
+    level_label.pack(pady=10)
 
+    # Frame for Levels
     level_frame = tk.Frame(play_window, bg="#F8E7BB")
-    level_frame.pack(pady=10)
+    level_frame.pack(pady=5)
 
     selected_level = tk.StringVar(value="")
 
-    levels = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6"]
+    levels = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", 
+              "Level 6", "Level 7", "Level 8", "Level 9", "Level 10"]
+
+    # Create two rows for the levels
+    row_1_frame = tk.Frame(level_frame, bg="#F8E7BB")
+    row_1_frame.pack(pady=10)
+
+    row_2_frame = tk.Frame(level_frame, bg="#F8E7BB")
+    row_2_frame.pack(pady=10)
+
     level_buttons = []
-    for level in levels:
-        button = tk.Button(level_frame, text=level, bg="#F2CA5C", fg="#660000", font=("Inter", 24), width=9, height=2, borderwidth=4, relief="solid",
-                           command=lambda lvl=level: select_level(lvl),
-                           highlightthickness=2, highlightbackground="#660000", highlightcolor="#660000")
+
+    # First 5 levels in row 1
+    for level in levels[:5]:
+        button = tk.Button(row_1_frame, text=level, bg="#F2CA5C", fg="#660000", font=("Inter", 24), width=10, height=1, borderwidth=4, relief="solid",
+                        command=lambda lvl=level: select_level(lvl),
+                        highlightthickness=2, highlightbackground="#660000", highlightcolor="#660000")
         button.pack(side="left", padx=10, pady=10)
         level_buttons.append(button)
 
+    # Remaining 5 levels in row 2
+    for level in levels[5:]:
+        button = tk.Button(row_2_frame, text=level, bg="#F2CA5C", fg="#660000", font=("Inter", 24), width=10, height=1, borderwidth=4, relief="solid",
+                        command=lambda lvl=level: select_level(lvl),
+                        highlightthickness=2, highlightbackground="#660000", highlightcolor="#660000")
+        button.pack(side="left", padx=10, pady=10)
+        level_buttons.append(button)
+
+    # Play Button
     play_button = tk.Button(play_window, text="Play", bg="#F2CA5C", fg="#660000", font=("Inter", 32), width=10, height=2, borderwidth=4, relief="solid",
                             highlightthickness=2, highlightbackground="#660000", highlightcolor="#660000", command=on_play_button_click)
     play_button.pack(pady=40)

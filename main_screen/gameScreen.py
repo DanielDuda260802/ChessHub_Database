@@ -40,12 +40,47 @@ class ChessGUI:
         self.selected_square = None
         self.highlighted_squares = []
 
-        self.engine = chess.engine.SimpleEngine.popen_uci("/home/daniel/Desktop/stockfish/stockfish-ubuntu-x86-64-avx2")
+        # Mapa razina (1-10) na Stockfish Skill Level (0-20)
+        self.level_map = {
+            "Level 1": {"skill_level": 0, "threads": 1, "hash": 8, "elo": 1320, "move_overhead": 400, "nodestime": 10, "limit_strength": True},
+            "Level 2": {"skill_level": 2, "threads": 1, "hash": 16, "elo": 1400, "move_overhead": 300, "nodestime": 20, "limit_strength": True},
+            "Level 3": {"skill_level": 4, "threads": 1, "hash": 64, "elo": 1600, "move_overhead": 200, "nodestime": 40, "limit_strength": True},
+            "Level 4": {"skill_level": 6, "threads": 1, "hash": 128, "elo": 1800, "move_overhead": 150, "nodestime": 80, "limit_strength": True},
+            "Level 5": {"skill_level": 9, "threads": 2, "hash": 256, "elo": 2000, "move_overhead": 125, "nodestime": 160, "limit_strength": True},
+            "Level 6": {"skill_level": 12, "threads": 2, "hash": 512, "elo": 2200, "move_overhead": 100, "nodestime": 320, "limit_strength": False},
+            "Level 7": {"skill_level": 14, "threads": 4, "hash": 512, "elo": 2400, "move_overhead": 75, "nodestime": 400, "limit_strength": False},
+            "Level 8": {"skill_level": 16, "threads": 4, "hash": 1024, "elo": 2600, "move_overhead": 50, "nodestime": 500, "limit_strength": False},
+            "Level 9": {"skill_level": 18, "threads": 6, "hash": 1024, "elo": 2800, "move_overhead": 30, "nodestime": 600, "limit_strength": False},
+            "Level 10": {"skill_level": 20, "threads": 8, "hash": 2048, "elo": 3000, "move_overhead": 20, "nodestime": 800, "limit_strength": False}
+        }
+
+        self.init_engine()
 
         self.init_time_labels(root)
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
         self.start_timer()
+
+    def init_engine(self):
+        self.engine = chess.engine.SimpleEngine.popen_uci(config.STOCKFISH_PATH)
+
+        # Dohvati postavke za odabranu razinu
+        config_options = self.level_map[self.level]
+        stockfish_skill_level = config_options["skill_level"]
+        
+
+        # Konfiguriranje motora s više opcija
+        self.engine.configure({
+            "Skill Level": stockfish_skill_level,
+            "Threads": config_options["threads"],
+            "Hash": config_options["hash"],
+            "UCI_LimitStrength": config_options["limit_strength"],
+            "UCI_Elo": config_options["elo"],
+            "Move Overhead": config_options["move_overhead"],
+            "nodestime": config_options["nodestime"]
+        })
+
+        print(f"Stockfish configured with: {config_options}")
 
     def start_timer(self):
         if self.board.turn == chess.WHITE:
@@ -196,14 +231,24 @@ class ChessGUI:
 
     def _run_ai_move(self):
         if self.board.is_game_over() or self.game_over:
+            self.end_game()
             return
 
+        # Prilagodba time_limit ovisno o preostalom vremenu i razini
         if self.board.turn == chess.WHITE:
             self.start_white_timer()
         else:
             self.start_black_timer()
 
-        result = self.engine.play(self.board, chess.engine.Limit(time=10))
+        # Koristi Limit koji uključuje preostalo vrijeme i dodatak
+        limit = chess.engine.Limit(
+            white_clock=self.white_time,
+            black_clock=self.black_time,
+            white_inc=self.white_increment,
+            black_inc=self.black_increment
+        )
+
+        result = self.engine.play(self.board, limit)
 
         if self.game_over or self.board.is_game_over() or self.white_time <= 0 or self.black_time <= 0:
             return

@@ -15,12 +15,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from helper import config
 from helper.helper_methods import board_to_image
-
-def connect_to_database():
-    return sqlite3.connect('chess_db.sqlite')
+from helper import database_utils
 
 def open_game_window(game_id, source_table):
-    conn = connect_to_database()
+    conn = database_utils.connect_to_database()
     cursor = conn.cursor()
 
     if source_table == "games":
