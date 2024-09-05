@@ -1,5 +1,8 @@
 import datetime
+from io import BytesIO
+import cairosvg
 import tkinter as tk
+from tkinter import simpledialog
 from PIL import Image, ImageTk
 import chess  # type: ignore
 import chess.engine  # type: ignore
@@ -7,7 +10,6 @@ import cairosvg  # type: ignore
 import os
 import sys
 import threading
-import time
 
 base_dir = os.path.dirname(__file__)
 assets_dir = os.path.join(base_dir, "assets")
@@ -79,8 +81,6 @@ class ChessGUI:
             "Move Overhead": config_options["move_overhead"],
             "nodestime": config_options["nodestime"]
         })
-
-        print(f"Stockfish configured with: {config_options}")
 
     def start_timer(self):
         if self.board.turn == chess.WHITE:
@@ -181,6 +181,59 @@ class ChessGUI:
         self.black_time_label.config(text=self.format_time(self.black_time))
         self.timer_running = False
 
+    def promote_pawn(self, move):
+        promotion_window = tk.Toplevel(self.root)
+        promotion_window.title("Choose promotion piece")
+
+        save_directory = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/assets/promoted_pieces"
+
+        def create_image(piece_symbol):
+            """Generira sliku šahovske figure koristeći chess.svg."""
+            piece = chess.Piece.from_symbol(piece_symbol)
+            svg_data = chess.svg.piece(piece)
+
+            svg_file_path = os.path.join(save_directory, f"{piece_symbol}.svg")
+            png_file_path = os.path.join(save_directory, f"{piece_symbol}.png")
+
+            with open(svg_file_path, 'w') as svg_file:
+                svg_file.write(svg_data)
+
+            cairosvg.svg2png(url=svg_file_path, write_to=png_file_path)
+
+            image = Image.open(png_file_path)
+            return ImageTk.PhotoImage(image)
+
+        promotion_map = {'q': chess.QUEEN, 'r': chess.ROOK, 'b': chess.BISHOP, 'n': chess.KNIGHT}
+
+        def promote_to(piece_symbol):
+            promotion_piece = promotion_map[piece_symbol]
+            promotion_move = chess.Move(move.from_square, move.to_square, promotion=promotion_piece)
+            if promotion_move in self.board.legal_moves:
+                self.board.push(promotion_move)
+                self.selected_square = None
+                self.highlighted_squares = []
+                self.timer_running = False
+                self.pause_white_timer() if self.board.turn == chess.BLACK else self.pause_black_timer()
+                self.draw_board()
+                self.root.after(200, self.make_ai_move)
+            else:
+                print("Invalid promotion move!")
+            promotion_window.destroy()
+
+        queen_image = create_image('Q')
+        rook_image = create_image('R')
+        bishop_image = create_image('B')
+        knight_image = create_image('N')
+
+        tk.Button(promotion_window, image=queen_image, command=lambda: promote_to('q')).grid(row=0, column=0)
+        tk.Button(promotion_window, image=rook_image, command=lambda: promote_to('r')).grid(row=0, column=1)
+        tk.Button(promotion_window, image=bishop_image, command=lambda: promote_to('b')).grid(row=0, column=2)
+        tk.Button(promotion_window, image=knight_image, command=lambda: promote_to('n')).grid(row=0, column=3)
+
+        promotion_window.transient(self.root)
+        promotion_window.grab_set()
+        self.root.wait_window(promotion_window)
+
     def on_click(self, event):
         if self.game_over:
             return
@@ -211,7 +264,17 @@ class ChessGUI:
                         self.highlighted_squares = []
                 else:
                     move = chess.Move(self.selected_square, square)
-                    if move in self.board.legal_moves:
+
+                    # Provjeri za promociju pješaka (ako pješak stiže do posljednjeg reda)
+                    if (self.board.piece_at(self.selected_square).piece_type == chess.PAWN and (
+                            (self.board.color_at(self.selected_square) == chess.WHITE and chess.square_rank(square) == 7) or 
+                            (self.board.color_at(self.selected_square) == chess.BLACK and chess.square_rank(square) == 0)
+                        )
+                    ):
+                        self.promote_pawn(move)
+
+                    # Provjeri da li je potez legalan
+                    elif move in self.board.legal_moves:
                         self.board.push(move)
                         self.selected_square = None
                         self.highlighted_squares = []
@@ -219,7 +282,9 @@ class ChessGUI:
                         self.pause_white_timer() if self.board.turn == chess.BLACK else self.pause_black_timer()
                         self.draw_board()
                         self.root.after(200, self.make_ai_move)
+
                     else:
+                        print("Invalid move!")
                         self.selected_square = None
                         self.highlighted_squares = []
                 self.draw_board()
@@ -234,13 +299,11 @@ class ChessGUI:
             self.end_game()
             return
 
-        # Prilagodba time_limit ovisno o preostalom vremenu i razini
         if self.board.turn == chess.WHITE:
             self.start_white_timer()
         else:
             self.start_black_timer()
 
-        # Koristi Limit koji uključuje preostalo vrijeme i dodatak
         limit = chess.engine.Limit(
             white_clock=self.white_time,
             black_clock=self.black_time,
@@ -357,6 +420,40 @@ class ChessGUI:
         cancel_button = tk.Button(result_window, text="Close and leave", command=close_and_leave, **button_style)
         cancel_button.pack(side="right", padx=20, pady=20)
 
+    def save_game_as_resignation(self):
+        game = chess.pgn.Game()
+        game.headers["White"] = "User" if self.player_color == chess.WHITE else f"Stockfish - {self.level}"
+        game.headers["Black"] = "User" if self.player_color == chess.BLACK else f"Stockfish - {self.level}"
+        game.headers["Result"] = "0-1" if self.player_color == chess.WHITE else "1-0"
+        game.headers["WhiteTime"] = self.format_time(self.white_time)
+        game.headers["BlackTime"] = self.format_time(self.black_time)
+        game.headers["Date"] = datetime.datetime.now().strftime("%Y.%m.%d")
+
+        node = game
+        for move in self.board.move_stack:
+            node = node.add_main_variation(move)
+
+        pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/MyGames.pgn"
+        with open(pgn_file_path, "a") as pgn_file:
+            print(game, file=pgn_file, end="\n\n")
+
+        self.root.quit()
+        self.root.destroy()
+
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
+    
+    def quit_game(self):
+        """Zatvara trenutni prozor i aplikaciju."""
+        self.pause_timers()  
+        self.engine.quit()  
+        self.gameScreenWindow.quit()   
+        self.root.quit()
+        self.root.destroy()
+
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
+
 
 def start_game_screen(color, white_time, white_increment, black_time, black_increment, level):
     gameScreenWindow = tk.Toplevel()
@@ -377,7 +474,41 @@ def start_game_screen(color, white_time, white_increment, black_time, black_incr
 
     chess_gui = ChessGUI(board_frame, gameScreenWindow, board, flipped=flipped, player_color=chess.WHITE if color.lower() == "white" else chess.BLACK, white_time=white_time, black_time=black_time, white_increment=white_increment, black_increment=black_increment, level=level)
 
-    resign_button = tk.Button(info_frame, text="Resign and Leave", font=("Inter", 16), bg="#F2CA5C", fg="#660000", width=20, height=2, borderwidth=2, relief="solid")
+    def on_resign_button_click():
+        resign_window = tk.Toplevel(gameScreenWindow)
+        resign_window.title("Confirm Resignation")
+
+        confirm_label = tk.Label(resign_window, text="Are you sure you want to resign and leave?", font=("Inter", 16))
+        confirm_label.pack(pady=20, padx=20)
+
+        button_style = {
+            "font": ("Inter", 14),
+            "bg": "#F2CA5C",
+            "fg": "#660000",
+            "width": 15,
+            "height": 2,
+            "borderwidth": 2,
+            "relief": "solid",
+            "highlightbackground": "#480202",
+            "highlightthickness": 2
+        }
+
+        def save_and_leave():
+            chess_gui.save_game_as_resignation()
+            chess_gui.quit_game()
+            resign_window.destroy()
+
+        def just_leave():
+            chess_gui.quit_game()
+            resign_window.destroy()
+
+        save_button = tk.Button(resign_window, text="Save and Leave", command=save_and_leave, **button_style)
+        save_button.pack(side="left", padx=10, pady=10)
+
+        leave_button = tk.Button(resign_window, text="Leave", command=just_leave, **button_style)
+        leave_button.pack(side="right", padx=10, pady=10)
+
+    resign_button = tk.Button(info_frame, text="Resign and Leave", font=("Inter", 16), bg="#F2CA5C", fg="#660000", width=20, height=2, borderwidth=2, relief="solid", command=on_resign_button_click)
     resign_button.grid(row=3, column=0, pady=50, sticky="s")
 
     gameScreenWindow.mainloop()
