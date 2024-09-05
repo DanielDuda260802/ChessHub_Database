@@ -5,7 +5,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from helper.helper_methods import load_and_resize_image_PhotoImage
 import gameScreen
-import config
+from helper import config
 from PIL import Image, ImageTk
 from tkinter import messagebox
 import tkinter as tk

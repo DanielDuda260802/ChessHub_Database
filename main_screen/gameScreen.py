@@ -1,26 +1,31 @@
+import datetime
 import tkinter as tk
 from PIL import Image, ImageTk
-import chess
-import chess.engine
-import cairosvg
+import chess  # type: ignore
+import chess.engine  # type: ignore
+import cairosvg  # type: ignore
 import os
 import sys
 import threading
+import time
 
 base_dir = os.path.dirname(__file__)
 assets_dir = os.path.join(base_dir, "assets")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-import config
+from helper import config
+import playVsComputerSetupScreen
 
 class ChessGUI:
-    def __init__(self, root, board, flipped, player_color, white_time, black_time, white_increment, black_increment):
+    def __init__(self, root, gameScreenWindow, board, flipped, player_color, white_time, black_time, white_increment, black_increment, level):
         self.board = board
         self.root = root
+        self.gameScreenWindow = gameScreenWindow 
         self.flipped = flipped
         self.player_color = player_color
+        self.level = level
         self.engine = None
-        self.game_over = False  # Dodano za provjeru je li igra završena
+        self.game_over = False
 
         self.white_time = int(white_time) * 60
         self.black_time = int(black_time) * 60
@@ -142,7 +147,7 @@ class ChessGUI:
         self.timer_running = False
 
     def on_click(self, event):
-        if self.game_over:  # Onemogućavanje daljnjih poteza
+        if self.game_over:
             return
 
         col = event.x // self.square_size
@@ -154,7 +159,6 @@ class ChessGUI:
 
         if 0 <= col < 8 and 0 <= row < 8:
             square = chess.square(col, 7 - row)
-            print(f"Clicked on square: {chess.square_name(square)}")
 
             if self.board.turn == self.player_color:
                 if self.selected_square is None:
@@ -186,12 +190,12 @@ class ChessGUI:
                 self.draw_board()
 
     def make_ai_move(self):
-        if self.game_over:  # Ako je igra već gotova, AI ne treba igrati
+        if self.game_over:
             return
         threading.Thread(target=self._run_ai_move, daemon=True).start()
 
     def _run_ai_move(self):
-        if self.board.is_game_over() or self.game_over: 
+        if self.board.is_game_over() or self.game_over:
             return
 
         if self.board.turn == chess.WHITE:
@@ -203,7 +207,7 @@ class ChessGUI:
 
         if self.game_over or self.board.is_game_over() or self.white_time <= 0 or self.black_time <= 0:
             return
-        else: 
+        else:
             self.board.push(result.move)
 
         if self.board.turn == chess.WHITE:
@@ -221,20 +225,9 @@ class ChessGUI:
     def end_game(self, message="Game over"):
         self.pause_timers()
         self.engine.quit()
-
-        self.game_over = True 
-
-        if self.white_time <= 0:
-            result = "0-1" if self.player_color == chess.WHITE else "1-0"
-            message = "White's time is up! Black wins."
-        elif self.black_time <= 0:
-            result = "1-0" if self.player_color == chess.BLACK else "0-1"
-            message = "Black's time is up! White wins."
-        else:
-            result = self.get_game_result()
-
+        self.game_over = True
+        result = self.get_game_result()
         self.show_result_menu(result, message)
-
 
     def pause_timers(self):
         self.timer_running = False
@@ -242,40 +235,82 @@ class ChessGUI:
         self.pause_black_timer()
 
     def get_game_result(self):
+        if self.white_time <= 0:
+            return "0-1"
+        elif self.black_time <= 0:
+            return "1-0"
         if self.board.is_checkmate():
-            if self.board.turn == chess.WHITE:
-                return "0-1"  
-            else:
-                return "1-0" 
+            return "0-1" if self.board.turn == chess.WHITE else "1-0"
         elif self.board.is_stalemate():
-            return "1/2-1/2"  
+            return "1/2-1/2"
         elif self.board.is_insufficient_material():
-            return "1/2-1/2"  # Remi zbog nedovoljnog materijala
+            return "1/2-1/2"
         elif self.board.is_seventyfive_moves():
-            return "1/2-1/2"  # Remi zbog pravila 75 poteza
+            return "1/2-1/2"
         elif self.board.is_fivefold_repetition():
-            return "1/2-1/2"  # Remi zbog ponavljanja poteza
-        return "Unknown"
+            return "1/2-1/2"
+        return "*"
 
     def show_result_menu(self, result, message):
         result_window = tk.Toplevel(self.root)
         result_window.title("Game Over")
 
-        result_label = tk.Label(result_window, text=f"User vs Stockfish: {result}", font=("Inter", 24))
-        result_label.pack(pady=20)
+        def new_game():
+            result_window.destroy()
+            self.gameScreenWindow.destroy()
+            playVsComputerSetupScreen.open_play_vs_computer_window()
+
+        def save_game():
+            game = chess.pgn.Game()
+            game.headers["White"] = "User" if self.player_color == chess.WHITE else f"Stockfish - {self.level}"
+            game.headers["Black"] = "User" if self.player_color == chess.BLACK else f"Stockfish - {self.level}"
+            game.headers["Result"] = self.get_game_result()
+            game.headers["WhiteTime"] = self.format_time(self.white_time)
+            game.headers["BlackTime"] = self.format_time(self.black_time)
+            game.headers["Date"] = datetime.datetime.now().strftime("%Y.%m.%d")
+
+            node = game
+            for move in self.board.move_stack:
+                node = node.add_main_variation(move)
+
+            pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/MyGames.pgn"
+            with open(pgn_file_path, "a") as pgn_file:
+                print(game, file=pgn_file, end="\n\n")
+
+        def close_and_leave():
+            """Zatvara sve prozore i ponovno pokreće aplikaciju."""
+            self.root.quit()
+            self.root.destroy()
+
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
+
+        result_label = tk.Label(result_window, text=f"User vs Stockfish: {result}", font=("Inter", 24), pady=20)
+        result_label.pack()
 
         message_label = tk.Label(result_window, text=message, font=("Inter", 16))
         message_label.pack(pady=10)
 
-        save_button = tk.Button(result_window, text="Save", font=("Inter", 14), command=self.save_game)
+        button_style = {
+            "font": ("Inter", 16),
+            "bg": "#F2CA5C",
+            "fg": "#660000",
+            "width": 20,
+            "height": 2,
+            "borderwidth": 2,
+            "relief": "solid",
+            "highlightbackground": "#480202",
+            "highlightthickness": 2
+        }
+
+        save_button = tk.Button(result_window, text="Save", command=save_game, **button_style)
         save_button.pack(side="left", padx=20, pady=20)
 
-        cancel_button = tk.Button(result_window, text="Cancel", font=("Inter", 14), command=result_window.destroy)
-        cancel_button.pack(side="right", padx=20, pady=20)
+        newGame_button = tk.Button(result_window, text="New Game", command=new_game, **button_style)
+        newGame_button.pack(side="left", padx=20, pady=20)
 
-    def save_game(self):
-        print("Igra spremljena")
-        # Implementiraj logiku za spremanje rezultata
+        cancel_button = tk.Button(result_window, text="Close and leave", command=close_and_leave, **button_style)
+        cancel_button.pack(side="right", padx=20, pady=20)
 
 
 def start_game_screen(color, white_time, white_increment, black_time, black_increment, level):
@@ -295,7 +330,7 @@ def start_game_screen(color, white_time, white_increment, black_time, black_incr
 
     flipped = True if color.lower() == "black" else False
 
-    chess_gui = ChessGUI(board_frame, board, flipped=flipped, player_color=chess.WHITE if color.lower() == "white" else chess.BLACK, white_time=white_time, black_time=black_time, white_increment=white_increment, black_increment=black_increment)
+    chess_gui = ChessGUI(board_frame, gameScreenWindow, board, flipped=flipped, player_color=chess.WHITE if color.lower() == "white" else chess.BLACK, white_time=white_time, black_time=black_time, white_increment=white_increment, black_increment=black_increment, level=level)
 
     resign_button = tk.Button(info_frame, text="Resign and Leave", font=("Inter", 16), bg="#F2CA5C", fg="#660000", width=20, height=2, borderwidth=2, relief="solid")
     resign_button.grid(row=3, column=0, pady=50, sticky="s")

@@ -1,12 +1,12 @@
 import os
 
-base_dir = os.path.dirname(__file__)
+base_dir = os.path.dirname(os.path.dirname(__file__))
 assets_dir = os.path.join(base_dir, "assets")
-
 
 analysis_board_image_path = os.path.join(assets_dir, "AnalysisBoard.png")
 find_player_image_path = os.path.join(assets_dir, "FindPlayer.png")
-chessHubDabase_image_path = os.path.join(assets_dir, "Database.png")
+chessHubDatabase_image_path = os.path.join(assets_dir, "Database.png")
+myGames_image_path = os.path.join(assets_dir, "MyGames.png")
 unchecked_image_path = os.path.join(assets_dir, "unchecked_image.png")
 checked_image_path = os.path.join(assets_dir, "checked_image.png")
 
@@ -29,6 +29,9 @@ label_font = ("Inter", 16)
 
 # pgn_file_path
 pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/twic1536.pgn"
+
+# my_games_pgn_file_path
+my_games_pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/MyGames.pgn"
 
 # Assuming Stockfish binary is available locally
 STOCKFISH_PATH = "/home/daniel/Desktop/stockfish/stockfish-ubuntu-x86-64-avx2"
