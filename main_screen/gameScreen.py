@@ -1,6 +1,6 @@
 import datetime
 from io import BytesIO
-import cairosvg
+import cairosvg # type: ignore
 import tkinter as tk
 from tkinter import simpledialog
 from PIL import Image, ImageTk
@@ -96,23 +96,25 @@ class ChessGUI:
 
     def init_time_labels(self, root):
         info_frame = root.master.winfo_children()[1]
-        white_time_container = tk.Frame(info_frame, bg="#F8E7BB")
-        white_time_container.grid(row=0, column=0, pady=20, padx=20, sticky="ew")
+        info_frame.grid_columnconfigure(0, weight=1)
 
-        white_color_box = tk.Label(white_time_container, bg="white", width=4, height=2, borderwidth=2, relief="solid")
-        white_color_box.grid(row=0, column=0, padx=(0, 10))
+        white_time_container = tk.Frame(info_frame, bg="#F8E7BB", highlightthickness=4, highlightbackground="#660000")
+        white_time_container.grid(row=0, column=0, pady=20, padx=10, sticky="ew")
 
-        self.white_time_label = tk.Label(white_time_container, text=self.format_time(self.white_time), font=("Inter", 36), bg="#F8E7BB", fg="#000000", borderwidth=2, relief="solid", padx=10, pady=5)
-        self.white_time_label.grid(row=0, column=1)
+        white_color_box = tk.Label(white_time_container, bg="white", width=6, height=3, borderwidth=4, relief="solid", highlightthickness=2, highlightbackground="#FFFFFF")
+        white_color_box.grid(row=0, column=0, padx=(40, 240))
 
-        black_time_container = tk.Frame(info_frame, bg="#F8E7BB")
-        black_time_container.grid(row=1, column=0, pady=10, padx=20, sticky="ew")
+        self.white_time_label = tk.Label(white_time_container, text=self.format_time(self.white_time), font=("Inter", 48), bg="#F8E7BB", padx=20, pady=10)
+        self.white_time_label.grid(row=0, column=1, sticky="ew")
 
-        black_color_box = tk.Label(black_time_container, bg="black", width=4, height=2, borderwidth=2, relief="solid")
-        black_color_box.grid(row=0, column=0, padx=(0, 10))
+        black_time_container = tk.Frame(info_frame, bg="#F8E7BB", highlightthickness=4, highlightbackground="#660000")
+        black_time_container.grid(row=1, column=0, pady=20, padx=10, sticky="ew")
 
-        self.black_time_label = tk.Label(black_time_container, text=self.format_time(self.black_time), font=("Inter", 36), bg="#F8E7BB", fg="#000000", borderwidth=2, relief="solid", padx=10, pady=5)
-        self.black_time_label.grid(row=0, column=1)
+        black_color_box = tk.Label(black_time_container, bg="black", width=6, height=3, borderwidth=4, relief="solid", highlightthickness=2, highlightbackground="#000000")
+        black_color_box.grid(row=0, column=0, padx=(40, 240))
+
+        self.black_time_label = tk.Label(black_time_container, text=self.format_time(self.black_time), font=("Inter", 48), bg="#F8E7BB", padx=20, pady=10)
+        self.black_time_label.grid(row=0, column=1, sticky="ew")
 
     def board_to_image(self, size):
         arrows = [chess.svg.Arrow(square, square, color="#033313") for square in self.highlighted_squares]
@@ -462,11 +464,14 @@ def start_game_screen(color, white_time, white_increment, black_time, black_incr
     gameScreenWindow.geometry(f"{screen_width}x{screen_height}")
     gameScreenWindow.configure(bg="#F8E7BB")
 
-    board_frame = tk.Frame(gameScreenWindow, width=int(screen_width * 0.80), height=screen_height, bg="#660000")
-    board_frame.pack(side="left", padx=10, pady=10, fill="both", expand=True)
+    board_size = min(screen_width * 0.7, screen_height * 0.9)
 
-    info_frame = tk.Frame(gameScreenWindow, bg="#F8E7BB", width=int(screen_width * 0.20), relief="flat", bd=10)
-    info_frame.pack(side="right", fill="y", expand=True, padx=10, pady=10)
+    board_frame = tk.Frame(gameScreenWindow, width=int(board_size), height=int(board_size), bg="#660000")
+    board_frame.pack(side="left", padx=10, pady=10, anchor="n")
+    board_frame.pack_propagate(0) 
+
+    info_frame = tk.Frame(gameScreenWindow, bg="#F8E7BB", width=int(screen_width * 0.40), relief="flat", bd=10)
+    info_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
     board = chess.Board()
 

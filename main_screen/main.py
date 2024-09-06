@@ -9,6 +9,7 @@ from helper import helper_methods
 from helper import database_utils
 from helper import config
 import playVsComputerSetupScreen
+from analysis_board import open_analysis_board_window
 
 import tkinter as tk
 from PIL import ImageTk
@@ -61,14 +62,14 @@ def create_play_vs_computer_button(parent_frame):
     
     return playVsComputer_btn
 
-def create_icon_with_label(parent_frame, image_path, image_size, text):
+def create_icon_with_label(parent_frame, image_path, image_size, text, command=None):
     image = helper_methods.load_and_resize_image(image_path, image_size)
     icon_photo = ImageTk.PhotoImage(image)
     frame = tk.Frame(parent_frame, bg=config.background_color)
     frame.pack(side="left", padx=30)
-    icon = tk.Label(frame, image=icon_photo, bg=config.background_color)
-    icon.image = icon_photo
-    icon.pack(side="top")
+    icon_button = tk.Button(frame, image=icon_photo, bg=config.background_color, borderwidth=0, command=command)
+    icon_button.image = icon_photo
+    icon_button.pack(side="top")
     label = tk.Label(frame, text=text, bg=config.background_color, fg=config.button_text_color, font=config.label_font)
     label.pack(side="top")
     return frame
@@ -118,7 +119,7 @@ table_frame.pack(side="bottom", fill="x", expand=False)
 
 create_play_vs_computer_button(content_frame)
 create_vertical_line(content_frame)
-create_icon_with_label(content_frame, config.analysis_board_image_path, (76, 76), "Analysis board")
+create_icon_with_label(content_frame, config.analysis_board_image_path, (76, 76), "Analysis board", command=open_analysis_board_window)
 create_vertical_line(content_frame)
 create_icon_with_label(content_frame, config.find_player_image_path, (94, 94), "Find Player")
 create_horizontal_line(root)
