@@ -18,6 +18,38 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from helper import config
 import playVsComputerSetupScreen
 
+def on_resign_button_click(chess_gui, gameScreenWindow):
+    resign_window = tk.Toplevel(gameScreenWindow)
+    resign_window.title("Confirm Resignation")
+
+    confirm_label = tk.Label(resign_window, text="Are you sure you want to resign and leave?", font=("Inter", 16))
+    confirm_label.pack(pady=20, padx=20)
+
+    button_style = {
+        "font": ("Inter", 14),
+        "bg": "#F2CA5C",
+        "fg": "#660000",
+        "width": 15,
+        "height": 2,
+        "borderwidth": 2,
+        "relief": "solid",
+        "highlightbackground": "#480202",
+        "highlightthickness": 2
+    }
+    def save_and_leave():
+        chess_gui.save_game_as_resignation()
+        chess_gui.quit_game()
+        resign_window.destroy()
+    def just_leave():
+        chess_gui.quit_game()
+        resign_window.destroy()
+
+    save_button = tk.Button(resign_window, text="Save and Leave", command=save_and_leave, **button_style)
+    save_button.pack(side="left", padx=10, pady=10)
+
+    leave_button = tk.Button(resign_window, text="Leave", command=just_leave, **button_style)
+    leave_button.pack(side="right", padx=10, pady=10)
+
 class ChessGUI:
     def __init__(self, root, gameScreenWindow, board, flipped, player_color, white_time, black_time, white_increment, black_increment, level):
         self.board = board
@@ -41,6 +73,7 @@ class ChessGUI:
 
         self.selected_square = None
         self.highlighted_squares = []
+        self.notation_moves = []
 
         # Mapa razina (1-10) na Stockfish Skill Level (0-20)
         self.level_map = {
@@ -57,8 +90,18 @@ class ChessGUI:
         }
 
         self.init_engine()
-
         self.init_time_labels(root)
+
+        self.notation_text = tk.Text(root.master.winfo_children()[1], font=("Inter", 16), bg="#F8E7BB", fg="#000000", wrap="word", state="disabled", relief="flat")
+        info_frame = root.master.winfo_children()[1]
+        info_frame.grid_columnconfigure(0, weight=1)
+        info_frame.grid_rowconfigure(2, weight=1)  
+
+        self.notation_text.grid(row=2, column=0, padx=5, pady=(0, 20), sticky="nsew")
+
+        self.resign_button = tk.Button(info_frame, text="Resign and Leave", font=("Inter", 16), bg="#F2CA5C", fg="#660000", width=20, height=2, borderwidth=2, relief="solid", command=lambda: on_resign_button_click(self, gameScreenWindow))
+        self.resign_button.grid(row=3, column=0, pady=10, sticky="ew")
+
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
         self.start_timer()
@@ -277,11 +320,15 @@ class ChessGUI:
 
                     # Provjeri da li je potez legalan
                     elif move in self.board.legal_moves:
+                        san_notation = self.board.san(move)
+                        print(f"san_notation: {san_notation}")
                         self.board.push(move)
+                        self.notation_moves.append(san_notation)
                         self.selected_square = None
                         self.highlighted_squares = []
                         self.timer_running = False
                         self.pause_white_timer() if self.board.turn == chess.BLACK else self.pause_black_timer()
+                        self.update_notation()
                         self.draw_board()
                         self.root.after(200, self.make_ai_move)
 
@@ -318,7 +365,10 @@ class ChessGUI:
         if self.game_over or self.board.is_game_over() or self.white_time <= 0 or self.black_time <= 0:
             return
         else:
+            san_notation = self.board.san(result.move)
+            print(f"san_notation: {san_notation}")
             self.board.push(result.move)
+            self.notation_moves.append(san_notation)
 
         if self.board.turn == chess.WHITE:
             self.pause_black_timer()
@@ -327,10 +377,22 @@ class ChessGUI:
             self.pause_white_timer()
             self.start_black_timer()
 
+        self.update_notation()
         self.root.after(0, self.draw_board)
 
         if self.board.is_game_over():
             self.end_game()
+    
+    def update_notation(self):
+        """Updates the notation text box with the current moves."""
+        notation_str = " ".join(f"{i//2 + 1}. {self.notation_moves[i]} {self.notation_moves[i + 1] if i + 1 < len(self.notation_moves) else ''}" for i in range(0, len(self.notation_moves), 2))
+
+        print(notation_str)
+
+        self.notation_text.config(state="normal")
+        self.notation_text.delete(1.0, tk.END)
+        self.notation_text.insert(tk.END, notation_str)
+        self.notation_text.config(state="disabled")
 
     def end_game(self, message="Game over"):
         self.pause_timers()
@@ -462,7 +524,7 @@ def start_game_screen(color, white_time, white_increment, black_time, black_incr
     gameScreenWindow.title(f"Play Vs Computer - {level}")
     screen_width, screen_height = config.get_screen_dimensions(gameScreenWindow)
     gameScreenWindow.geometry(f"{screen_width}x{screen_height}")
-    gameScreenWindow.configure(bg="#F8E7BB")
+    gameScreenWindow.configure(bg="#480202")
 
     board_size = min(screen_width * 0.7, screen_height * 0.9)
 
@@ -470,50 +532,13 @@ def start_game_screen(color, white_time, white_increment, black_time, black_incr
     board_frame.pack(side="left", padx=10, pady=10, anchor="n")
     board_frame.pack_propagate(0) 
 
-    info_frame = tk.Frame(gameScreenWindow, bg="#F8E7BB", width=int(screen_width * 0.40), relief="flat", bd=10)
-    info_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+    info_frame = tk.Frame(gameScreenWindow, bg="#F8E7BB", width=int(screen_width * 0.20), relief="flat", bd=10)
+    info_frame.pack(side="right", fill="both", expand=True)
 
     board = chess.Board()
 
     flipped = True if color.lower() == "black" else False
 
     chess_gui = ChessGUI(board_frame, gameScreenWindow, board, flipped=flipped, player_color=chess.WHITE if color.lower() == "white" else chess.BLACK, white_time=white_time, black_time=black_time, white_increment=white_increment, black_increment=black_increment, level=level)
-
-    def on_resign_button_click():
-        resign_window = tk.Toplevel(gameScreenWindow)
-        resign_window.title("Confirm Resignation")
-
-        confirm_label = tk.Label(resign_window, text="Are you sure you want to resign and leave?", font=("Inter", 16))
-        confirm_label.pack(pady=20, padx=20)
-
-        button_style = {
-            "font": ("Inter", 14),
-            "bg": "#F2CA5C",
-            "fg": "#660000",
-            "width": 15,
-            "height": 2,
-            "borderwidth": 2,
-            "relief": "solid",
-            "highlightbackground": "#480202",
-            "highlightthickness": 2
-        }
-
-        def save_and_leave():
-            chess_gui.save_game_as_resignation()
-            chess_gui.quit_game()
-            resign_window.destroy()
-
-        def just_leave():
-            chess_gui.quit_game()
-            resign_window.destroy()
-
-        save_button = tk.Button(resign_window, text="Save and Leave", command=save_and_leave, **button_style)
-        save_button.pack(side="left", padx=10, pady=10)
-
-        leave_button = tk.Button(resign_window, text="Leave", command=just_leave, **button_style)
-        leave_button.pack(side="right", padx=10, pady=10)
-
-    resign_button = tk.Button(info_frame, text="Resign and Leave", font=("Inter", 16), bg="#F2CA5C", fg="#660000", width=20, height=2, borderwidth=2, relief="solid", command=on_resign_button_click)
-    resign_button.grid(row=3, column=0, pady=50, sticky="s")
 
     gameScreenWindow.mainloop()

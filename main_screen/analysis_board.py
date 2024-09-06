@@ -1,8 +1,8 @@
 import sys
 import tkinter as tk
 from PIL import Image, ImageTk
-import chess
-import cairosvg
+import chess # type: ignore
+import cairosvg # type: ignore
 import os
 
 base_dir = os.path.dirname(__file__)
@@ -22,7 +22,8 @@ class ChessGUI:
 
         self.selected_square = None
         self.highlighted_squares = []
-        self.flipped = False  # Optional: Can add a button to flip the board for fun
+        self.flipped = False
+        self.notation_moves = []
 
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
@@ -42,7 +43,7 @@ class ChessGUI:
         self.square_size = self.size // 8
 
         self.canvas.config(width=canvas_width, height=canvas_height)
-        self.canvas.pack_propagate(0)  
+        self.canvas.pack_propagate(0)
 
         board_image_path = self.board_to_image(self.size)
         board_image = Image.open(board_image_path)
@@ -56,7 +57,7 @@ class ChessGUI:
         promotion_window = tk.Toplevel(self.root)
         promotion_window.title("Choose promotion piece")
 
-        save_directory = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/assets/promoted_pieces"
+        save_directory = os.path.join(assets_dir, "promoted_pieces")
 
         def create_image(piece_symbol):
             """Generira sliku šahovske figure koristeći chess.svg."""
@@ -80,9 +81,13 @@ class ChessGUI:
             promotion_piece = promotion_map[piece_symbol]
             promotion_move = chess.Move(move.from_square, move.to_square, promotion=promotion_piece)
             if promotion_move in self.board.legal_moves:
+                san_notation = self.board.san(move)
+                print(f"san_notation: {san_notation}")
                 self.board.push(promotion_move)
+                self.notation_moves.append(san_notation)
                 self.selected_square = None
                 self.highlighted_squares = []
+                self.update_notation()
                 self.draw_board()
             else:
                 print("Invalid promotion move!")
@@ -136,9 +141,14 @@ class ChessGUI:
                 ):
                     self.promote_pawn(move)
                 elif move in self.board.legal_moves:
+                    san_notation = self.board.san(move)
+                    print(f"san_notation: {san_notation}")
                     self.board.push(move)
+                    self.notation_moves.append(san_notation)
+
                     self.selected_square = None
                     self.highlighted_squares = []
+                    self.update_notation()
                     self.draw_board()
                 else:
                     print("Invalid move!")
@@ -146,26 +156,70 @@ class ChessGUI:
                     self.highlighted_squares = []
             self.draw_board()
 
+    def update_notation(self):
+        """Updates the notation text box with the current moves."""
+        notation_str = " ".join(f"{i//2 + 1}. {self.notation_moves[i]} {self.notation_moves[i + 1] if i + 1 < len(self.notation_moves) else ''}" for i in range(0, len(self.notation_moves), 2))
+
+        print(notation_str)
+
+        notation_text.config(state="normal")
+        notation_text.delete(1.0, tk.END)
+        notation_text.insert(tk.END, notation_str)
+        notation_text.config(state="disabled")
+
+
+def select_button(selected_button, buttons):
+    for button in buttons:
+        button.config(font=("Inter", 24, "normal"))
+    selected_button.config(font=("Inter", 24, "bold"))
+
 def open_analysis_board_window():
     analysisWindow = tk.Toplevel()
     analysisWindow.title("Analysis Board")
     screen_width, screen_height = config.get_screen_dimensions(analysisWindow)
     analysisWindow.geometry(f"{screen_width}x{screen_height}")
-    analysisWindow.configure(bg="#F8E7BB")
+    analysisWindow.configure(bg="#480202")
 
-    # Definiraj veličinu šahovske ploče
     board_size = min(screen_width * 0.7, screen_height * 0.9)
 
-    # Kreiraj board_frame koji ima točnu širinu i visinu ploče
     board_frame = tk.Frame(analysisWindow, width=int(board_size), height=int(board_size), bg="#660000")
     board_frame.pack(side="left", padx=10, pady=10, anchor="n")
     board_frame.pack_propagate(0)
 
-    info_frame = tk.Frame(analysisWindow, bg="#FFFFFF", width=int(screen_width * 0.20), relief="flat", bd=10)
-    info_frame.pack(side="right", fill="y", expand=True)
+    info_frame = tk.Frame(analysisWindow, bg="#F8E7BB", width=int(screen_width * 0.20), relief="flat", bd=10)
+    info_frame.pack(side="right", fill="both", expand=True)
+
+    buttons_frame = tk.Frame(info_frame, bg="#F8E7BB")
+    buttons_frame.pack(side="top", fill="x")
+
+    button_style = {
+        "font": ("Inter", 24),
+        "bg": "#F2CA5C",  
+        "fg": "#000000",  
+        "width": 15,
+        "height": 2,
+        "highlightbackground": "#660000", 
+        "highlightthickness": 4
+    }
+
+    # Postavi dugmad unutar buttons_frame koristeći pack s side="left"
+    notation_button = tk.Button(buttons_frame, text="Notation", **button_style, command=lambda: select_button(notation_button, buttons))
+    notation_button.pack(side="left", fill="x", padx=2)
+
+    reference_button = tk.Button(buttons_frame, text="Reference", **button_style, command=lambda: select_button(reference_button, buttons))
+    reference_button.pack(side="left", fill="x", padx=2)
+
+    kibitzer_button = tk.Button(buttons_frame, text="Add Kibitzer", **button_style, command=lambda: select_button(kibitzer_button, buttons))
+    kibitzer_button.pack(side="left", fill="x", padx=2)
+
+    buttons = [notation_button, reference_button, kibitzer_button]
+    select_button(notation_button, buttons)
+
+    # Notation text area
+    global notation_text
+    notation_text = tk.Text(info_frame, font=("Inter", 16), bg="#F8E7BB", fg="#000000", wrap="word", state="disabled", relief="flat")
+    notation_text.pack(fill="both", expand=True)
 
     board = chess.Board()
-
     chess_gui = ChessGUI(board_frame, analysisWindow, board)
-
-
+    chess_gui.update_notation()
