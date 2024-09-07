@@ -109,12 +109,9 @@ class ChessGUI:
     def init_engine(self):
         self.engine = chess.engine.SimpleEngine.popen_uci(config.STOCKFISH_PATH)
 
-        # Dohvati postavke za odabranu razinu
         config_options = self.level_map[self.level]
         stockfish_skill_level = config_options["skill_level"]
         
-
-        # Konfiguriranje motora s više opcija
         self.engine.configure({
             "Skill Level": stockfish_skill_level,
             "Threads": config_options["threads"],
@@ -321,7 +318,6 @@ class ChessGUI:
                     # Provjeri da li je potez legalan
                     elif move in self.board.legal_moves:
                         san_notation = self.board.san(move)
-                        print(f"san_notation: {san_notation}")
                         self.board.push(move)
                         self.notation_moves.append(san_notation)
                         self.selected_square = None
@@ -366,7 +362,6 @@ class ChessGUI:
             return
         else:
             san_notation = self.board.san(result.move)
-            print(f"san_notation: {san_notation}")
             self.board.push(result.move)
             self.notation_moves.append(san_notation)
 
