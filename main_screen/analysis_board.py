@@ -2,6 +2,7 @@ import sys
 import tkinter as tk
 from PIL import Image, ImageTk
 import chess # type: ignore
+import chess.pgn # type: ignore
 import cairosvg # type: ignore
 import os
 
@@ -12,10 +13,18 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from helper import config
 
 class ChessGUI:
-    def __init__(self, root, analysisWindow, board):
+    def __init__(self, root, analysisWindow, board, notation_text, nav_frame):
         self.board = board
         self.root = root
         self.analysisWindow = analysisWindow
+        self.notation_text = notation_text
+        self.nav_frame = nav_frame
+
+        # PGN
+        self.game = chess.pgn.Game()
+        self.current_node = self.game
+
+        self.current_move_index = 0
 
         self.canvas = tk.Canvas(root, bg="#000000")
         self.canvas.pack(expand=True, fill=tk.BOTH)
@@ -23,11 +32,6 @@ class ChessGUI:
         self.selected_square = None
         self.highlighted_squares = []
         self.flipped = False
-
-        # Notation button
-        self.current_move_index = 0
-        self.moves = list(board.move_stack)
-        self.notation_moves = []
 
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
@@ -64,7 +68,6 @@ class ChessGUI:
         save_directory = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/assets/promoted_pieces"
 
         def create_image(piece_symbol):
-            """Generira sliku šahovske figure koristeći chess.svg."""
             piece = chess.Piece.from_symbol(piece_symbol)
             svg_data = chess.svg.piece(piece)
 
@@ -84,10 +87,22 @@ class ChessGUI:
         def promote_to(piece_symbol):
             promotion_piece = promotion_map[piece_symbol]
             promotion_move = chess.Move(move.from_square, move.to_square, promotion=promotion_piece)
+            
             if promotion_move in self.board.legal_moves:
-                san_notation = self.board.san(move)
+                matching_variation = None
+                for variation in self.current_node.variations:
+                    if variation.move == promotion_move:
+                        matching_variation = variation
+                        break
+
+                if matching_variation:    
+                    # ako već postoji, koristi postojeći čvor
+                    self.current_node = matching_variation
+                else:
+                    # Dodaj novu varijantu ako potez nije odigran
+                    self.current_node = self.current_node.add_variation(promotion_move)
+                
                 self.board.push(promotion_move)
-                self.notation_moves.append(san_notation)
                 self.selected_square = None
                 self.highlighted_squares = []
                 self.update_notation()
@@ -137,112 +152,100 @@ class ChessGUI:
             else:
                 move = chess.Move(self.selected_square, square)
 
-                # Provjeri za promociju pješaka (ako pješak stiže do posljednjeg reda)
                 if self.board.piece_at(self.selected_square).piece_type == chess.PAWN and (
                         (self.board.color_at(self.selected_square) == chess.WHITE and chess.square_rank(square) == 7) or 
                         (self.board.color_at(self.selected_square) == chess.BLACK and chess.square_rank(square) == 0)
                 ):
                     self.promote_pawn(move)
                 elif move in self.board.legal_moves:
-                    san_notation = self.board.san(move)
-                    self.board.push(move)
-                    self.notation_moves.append(san_notation)
+                    # Provjera postoji li taj kao sljedeći potez u nekoj od varijanti
+                    matching_variation = None
+                    for variation in self.current_node.variations:
+                        if variation.move == move:
+                            matching_variation = variation
+                            break
+                    
+                    if matching_variation:
+                        # ako postoji, postavi current_node na varijantu s tim potezom
+                        self.current_node = matching_variation
+                    elif move in self.board.legal_moves:
+                        # ako potez već nije odigran, dodaj ga kao novu varijantu
+                        self.current_node = self.current_node.add_variation(move)
+                    else:
+                        self.selected_square = None
+                        self.highlighted_squares = []
+                        return
 
+                    self.board.push(move)
+                    
                     self.selected_square = None
                     self.highlighted_squares = []
-
-                    self.moves = list(self.board.move_stack)
-                    self.current_move_index = len(self.moves)
-
+                    
                     self.update_notation()
                     self.draw_board()
-                else:
-                    print("Invalid move!")
-                    self.selected_square = None
-                    self.highlighted_squares = []
+                    
             self.draw_board()
 
     def update_board(self):
         new_board = chess.Board()
-        for move in self.moves[:self.current_move_index]:
-            new_board.push(move)
+        node = self.game
+
+        # krećemo od korjena (početne pozicije) i prolazimo kroz sve varijante dok ne dođemo do current_node
+        while node != self.current_node:
+            for variation in node.variations:
+                if variation == self.current_node or variation.move in self.board.move_stack:
+                    node = variation
+                    new_board.push(node.move)
         self.board = new_board
         self.draw_board()
         self.update_notation()
 
     def prev_move(self):
-        if self.current_move_index > 0:
+        if self.current_node.parent:
+            self.current_node = self.current_node.parent
+            self.board.pop()
             self.current_move_index -= 1
             self.update_board()
+        else:
+            print("No previous move available!")
+
 
     def next_move(self):
-        if self.current_move_index < len(self.moves):
+        if self.current_node.variations:
+            self.current_node = self.current_node.variations[0]
+            self.board.push(self.current_node.move)
             self.current_move_index += 1
             self.update_board()
+        else:
+            print("No next move available!")
 
     def update_notation(self):
-        """Updates the notation text box with the current moves."""
-        notation_text.config(state="normal")
-        notation_text.delete(1.0, tk.END)
-        
-        notation_str = " ".join(f"{i//2 + 1}. {self.notation_moves[i]} {self.notation_moves[i + 1] if i + 1 < len(self.notation_moves) else ''}" for i in range(0, len(self.notation_moves), 2))
+            """Ažurira PGN notaciju u Text widgetu bez zaglavlja i bolda trenutni potez."""
+            self.notation_text.config(state="normal")
+            self.notation_text.delete(1.0, tk.END)
 
-        notation_list = notation_str.split()
-        move_index = 0 
-        
-        def on_click(event):
-            """Handles clicking on a move in the notation to jump to that move."""
-            index = notation_text.index(f"@{event.x},{event.y}")
-            clicked_tag = notation_text.tag_names(index)
+            exporter = chess.pgn.StringExporter(headers=False)
+            pgn = self.game.accept(exporter)
 
-            if clicked_tag and clicked_tag[0].startswith("move_"):
-                clicked_move_index = int(clicked_tag[0].split("_")[1]) + 1
-                self.current_move_index = clicked_move_index
-                self.update_board()
-
-        notation_text.bind("<Button-1>", on_click)
-
-        for i, move in enumerate(notation_list):
-            current_position = notation_text.index("end-1c")
-
-            if move.endswith('.'):
-                notation_text.insert(current_position, f"{move} ")
-            else:
-                start_idx = notation_text.index("end-1c")
-                notation_text.insert(start_idx, f"{move} ")
-                end_idx = notation_text.index("end-1c")
-
-                tag_name = f"move_{move_index}"
-                notation_text.tag_add(tag_name, start_idx, end_idx)
-
-                if move_index == self.current_move_index - 1:
-                    notation_text.tag_add("highlight", start_idx, end_idx)
-
-                move_index += 1
-
-        notation_text.tag_config("highlight", font=("Inter", 16, "bold"))
-        notation_text.config(state="disabled")
-
+            self.notation_text.insert(tk.END, pgn)
+            self.notation_text.config(state="disabled")
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:
         button.config(font=("Inter", 24, "normal"))
     selected_button.config(font=("Inter", 24, "bold"))
 
-    # Sakrij sve frameove
     for frame in content_frames:
         frame.pack_forget()
 
-    # Prikaži odgovarajući frame
     content_frames[buttons.index(selected_button)].pack(fill="both", expand=True)
 
-    # Ako je odabrana kartica "Notation", prikaži gumbe za poteze
     if selected_button["text"] == "Notation" and chess_gui:
-        notation_text.pack(fill="both", expand=True)
-        nav_frame.pack(side="bottom", padx=20)
+        chess_gui.notation_text.pack(fill="both", expand=True)
+        chess_gui.nav_frame.pack(side="bottom", padx=20)
     else:
-        notation_text.pack_forget()
-        nav_frame.pack_forget()
+        chess_gui.notation_text.pack_forget()
+        chess_gui.nav_frame.pack_forget()
 
 def open_analysis_board_window():
     analysisWindow = tk.Toplevel()
@@ -290,16 +293,13 @@ def open_analysis_board_window():
 
     content_frames = [notation_frame, reference_frame, kibitzer_frame]
 
-    # Notation text area
-    global notation_text
     notation_text = tk.Text(info_frame, font=("Inter", 16), bg="#F8E7BB", fg="#000000", wrap="word", state="disabled", relief="flat")
     notation_text.pack(fill="both", expand=True)
+    
+    nav_frame = tk.Frame(info_frame, bg="#F8E7BB")
 
     board = chess.Board()
-    chess_gui = ChessGUI(board_frame, analysisWindow, board)
-    
-    global nav_frame
-    nav_frame = tk.Frame(info_frame, bg="#F8E7BB")
+    chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame)
 
     prev_button = tk.Button(nav_frame, text="⟨", command=chess_gui.prev_move, font=("Inter", 24, "bold"), bg="#F2CA5C", fg="#660000", bd=0, width=20, height=2)
     prev_button.config(highlightbackground="#480202", highlightthickness=4)
@@ -314,10 +314,9 @@ def open_analysis_board_window():
 
     nav_frame.pack_forget()
 
-    # Select button logic
     notation_button.config(command=lambda: select_button(notation_button, buttons, content_frames, chess_gui))
-    reference_button.config(command=lambda: select_button(reference_button, buttons, content_frames))
-    kibitzer_button.config(command=lambda: select_button(kibitzer_button, buttons, content_frames))
+    reference_button.config(command=lambda: select_button(reference_button, buttons, content_frames, chess_gui))
+    kibitzer_button.config(command=lambda: select_button(kibitzer_button, buttons, content_frames, chess_gui))
 
     select_button(notation_button, buttons, content_frames, chess_gui)
     chess_gui.update_notation()
