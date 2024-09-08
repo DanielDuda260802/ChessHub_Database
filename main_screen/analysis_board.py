@@ -36,6 +36,8 @@ class ChessGUI:
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
 
+        self.notation_text.bind("<Button-1>", self.on_click_notation)
+
     def board_to_image(self, size):
         arrows = [chess.svg.Arrow(square, square, color="#033313") for square in self.highlighted_squares]
         svg_data = chess.svg.board(board=self.board, size=size, flipped=self.flipped, arrows=arrows)
@@ -102,10 +104,11 @@ class ChessGUI:
                     # Dodaj novu varijantu ako potez nije odigran
                     self.current_node = self.current_node.add_variation(promotion_move)
                 
+                self.update_notation(current_move=promotion_move)
                 self.board.push(promotion_move)
                 self.selected_square = None
                 self.highlighted_squares = []
-                self.update_notation()
+
                 self.draw_board()
             else:
                 print("Invalid promotion move!")
@@ -176,12 +179,13 @@ class ChessGUI:
                         self.highlighted_squares = []
                         return
 
+                    self.update_notation(current_move=move)
                     self.board.push(move)
                     
                     self.selected_square = None
                     self.highlighted_squares = []
                     
-                    self.update_notation()
+
                     self.draw_board()
                     
             self.draw_board()
@@ -198,37 +202,188 @@ class ChessGUI:
                     new_board.push(node.move)
         self.board = new_board
         self.draw_board()
-        self.update_notation()
-
+        
     def prev_move(self):
-        if self.current_node.parent:
+        if self.current_node.parent:            
             self.current_node = self.current_node.parent
-            self.board.pop()
+            if len(self.board.move_stack) > 0:
+                self.board.pop()
+            if len(self.board.move_stack) > 0:
+                self.board.pop()
+
+            self.update_notation(current_move=self.current_node.move)
+
+            if self.current_node.move:
+                self.board.push(self.current_node.move)
             self.current_move_index -= 1
+
             self.update_board()
         else:
             print("No previous move available!")
 
-
     def next_move(self):
         if self.current_node.variations:
-            self.current_node = self.current_node.variations[0]
-            self.board.push(self.current_node.move)
-            self.current_move_index += 1
-            self.update_board()
+            if len(self.current_node.variations) == 1:
+                move = self.current_node.variations[0].move
+                self.update_notation(current_move=move)
+                self.board.push(move)  # Gurni potez na ploču prije ažuriranja current_node
+                self.current_node = self.current_node.variations[0]  # Ažuriraj current_node tek nakon primjene poteza
+                self.current_move_index += 1
+                self.update_board()
+            else:
+                # Ako postoje više varijanti, otvori izbornik za odabir varijante
+                self.show_variation_menu()
         else:
             print("No next move available!")
 
-    def update_notation(self):
-            """Ažurira PGN notaciju u Text widgetu bez zaglavlja i bolda trenutni potez."""
-            self.notation_text.config(state="normal")
-            self.notation_text.delete(1.0, tk.END)
+    def show_variation_menu(self):
+        variation_window = tk.Toplevel(self.analysisWindow)
+        variation_window.title("Choose a Variation")
+        variation_window.geometry("300x200")
 
-            exporter = chess.pgn.StringExporter(headers=False)
-            pgn = self.game.accept(exporter)
+        listbox = tk.Listbox(variation_window, font=("Inter", 18))
+        listbox.pack(fill=tk.BOTH, padx=10, pady=15, expand=True)
 
-            self.notation_text.insert(tk.END, pgn)
-            self.notation_text.config(state="disabled")
+        def select_variation(event=None):
+            selected_index = listbox.curselection()
+            if selected_index:
+                variation = self.current_node.variations[selected_index[0]]
+                move = variation.move
+                self.update_notation(current_move=move)
+                self.current_node = variation
+                self.board.push(move)
+                self.current_move_index += 1
+                self.update_board()
+                variation_window.destroy()
+
+        for i, variation in enumerate(self.current_node.variations):
+            move_san = self.board.san(variation.move)
+            listbox.insert(tk.END, f"Variation {i + 1}: {move_san}")
+
+        listbox.selection_set(0)
+
+        listbox.bind("<Return>", select_variation)
+        listbox.bind("<Right>", select_variation)
+        listbox.bind("<Double-Button-1>", select_variation)
+        listbox.focus_set()
+
+        def move_up(event):
+            current_selection = listbox.curselection()
+            if current_selection:
+                current_index = current_selection[0]
+                if current_index > 0:
+                    listbox.selection_clear(current_index)
+                    listbox.selection_set(current_index - 1)
+
+        def move_down(event):
+            current_selection = listbox.curselection()
+            if current_selection:
+                current_index = current_selection[0]
+                if current_index < listbox.size() - 1:
+                    listbox.selection_clear(current_index)
+                    listbox.selection_set(current_index + 1)
+
+        listbox.bind("<Up>", move_up)
+        listbox.bind("<Down>", move_down)
+
+    def update_notation(self, current_move=None):
+        """Ažuriramo PGN notaciju i ističemo trenutni potez."""
+        self.notation_text.config(state="normal")
+        self.notation_text.delete(1.0, tk.END)
+
+        exporter = chess.pgn.StringExporter(headers=False, variations=True, comments=True)
+        pgn = self.game.accept(exporter)
+
+        self.notation_text.insert(tk.END, pgn)
+
+        fen_dict = {}
+
+        stack = [(self.game, chess.Board(), "1.0")]
+
+        while stack:
+            node, board, current_position = stack.pop()
+
+            # Prolazimo kroz sve varijante
+            for variation in node.variations:
+                move = variation.move
+
+                # Spremamo FEN poziciju prije nego što je potez odigran
+                pre_move_fen = board.fen()
+
+                if move not in board.legal_moves:
+                    print(f"Illegal move: {move} in {board.fen()}")
+                    continue
+
+                san_move = board.san(move)
+                board.push(move)
+
+                move_idx = self.notation_text.search(san_move, current_position, tk.END)
+
+                if not move_idx:
+                    print(f"Potez {san_move} nije pronađen u tekstu.")
+                    continue
+
+                if pre_move_fen not in fen_dict:
+                    fen_dict[pre_move_fen] = [(san_move, move_idx)]
+                else:
+                    fen_dict[pre_move_fen].append((san_move, move_idx))
+
+
+                current_position = self.notation_text.index(f"{move_idx} + {len(san_move)}c")
+                stack.append((variation, board.copy(), current_position))
+                board.pop()
+
+        if current_move:
+            try:
+                current_fen = self.board.fen()
+
+                if current_fen in fen_dict:
+                    san_list = fen_dict[current_fen]
+                    if len(san_list) == 1:
+                        san_move, move_idx = san_list[0]
+                        end_idx = f"{move_idx} + {len(san_move)} chars"
+                        self.notation_text.tag_add("highlight", move_idx, end_idx)
+                    else:
+                        # Ako postoji više poteza s istim FEN-om, usporedimo SAN
+                        for san_move, move_idx in san_list:
+                            if san_move == self.board.san(current_move):
+                                end_idx = f"{move_idx} + {len(san_move)} chars"
+                                self.notation_text.tag_add("highlight", move_idx, end_idx)
+                                break
+                else:
+                    print("FEN nije pronađen u rječniku!")
+            except AssertionError:
+                print(f"Potez {current_move} nije legalan u trenutnoj poziciji.")
+                print(self.board)
+
+        self.notation_text.tag_config("highlight", background="yellow", foreground="black", font=("Inter", 16, "bold"))
+        self.notation_text.config(state="disabled")
+
+    def on_click_notation(self, event):
+
+        index = self.notation_text.index(f"@{event.x},{event.y}")
+
+        print(f"Clicked on index: {index}")
+        clicked_text = self.get_full_move_text(index)
+        print(f"Clicked on move: {clicked_text}")
+
+    def get_full_move_text(self, index):
+        start_index = index
+        while True:
+            char_before = self.notation_text.get(f"{start_index} - 1 char", start_index)
+            if char_before.isspace() or char_before == "" or start_index == "1.0":
+                break
+            start_index = self.notation_text.index(f"{start_index} - 1 char")
+
+        end_index = index
+        while True:
+            char_after = self.notation_text.get(end_index, f"{end_index} + 1 char")
+            if char_after.isspace() or char_after == "" or end_index == tk.END:
+                break
+            end_index = self.notation_text.index(f"{end_index} + 1 char")
+
+        move_text = self.notation_text.get(start_index, end_index).strip()
+        return move_text
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:
@@ -319,4 +474,4 @@ def open_analysis_board_window():
     kibitzer_button.config(command=lambda: select_button(kibitzer_button, buttons, content_frames, chess_gui))
 
     select_button(notation_button, buttons, content_frames, chess_gui)
-    chess_gui.update_notation()
+    #chess_gui.update_notation()
