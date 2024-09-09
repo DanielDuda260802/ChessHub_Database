@@ -25,6 +25,7 @@ class ChessGUI:
         self.current_node = self.game
 
         self.current_move_index = 0
+        self.fen_dict = {}
 
         self.canvas = tk.Canvas(root, bg="#000000")
         self.canvas.pack(expand=True, fill=tk.BOTH)
@@ -226,12 +227,11 @@ class ChessGUI:
             if len(self.current_node.variations) == 1:
                 move = self.current_node.variations[0].move
                 self.update_notation(current_move=move)
-                self.board.push(move)  # Gurni potez na ploču prije ažuriranja current_node
-                self.current_node = self.current_node.variations[0]  # Ažuriraj current_node tek nakon primjene poteza
+                self.board.push(move) 
+                self.current_node = self.current_node.variations[0] 
                 self.current_move_index += 1
                 self.update_board()
             else:
-                # Ako postoje više varijanti, otvori izbornik za odabir varijante
                 self.show_variation_menu()
         else:
             print("No next move available!")
@@ -296,7 +296,7 @@ class ChessGUI:
 
         self.notation_text.insert(tk.END, pgn)
 
-        fen_dict = {}
+        self.fen_dict = {}
 
         stack = [(self.game, chess.Board(), "1.0")]
 
@@ -323,10 +323,11 @@ class ChessGUI:
                     print(f"Potez {san_move} nije pronađen u tekstu.")
                     continue
 
-                if pre_move_fen not in fen_dict:
-                    fen_dict[pre_move_fen] = [(san_move, move_idx)]
-                else:
-                    fen_dict[pre_move_fen].append((san_move, move_idx))
+                if move_idx:
+                    if pre_move_fen not in self.fen_dict:
+                        self.fen_dict[pre_move_fen] = [(san_move, move_idx)]
+                    else:
+                        self.fen_dict[pre_move_fen].append((san_move, move_idx))
 
 
                 current_position = self.notation_text.index(f"{move_idx} + {len(san_move)}c")
@@ -337,8 +338,8 @@ class ChessGUI:
             try:
                 current_fen = self.board.fen()
 
-                if current_fen in fen_dict:
-                    san_list = fen_dict[current_fen]
+                if current_fen in self.fen_dict:
+                    san_list = self.fen_dict[current_fen]
                     if len(san_list) == 1:
                         san_move, move_idx = san_list[0]
                         end_idx = f"{move_idx} + {len(san_move)} chars"
@@ -360,14 +361,79 @@ class ChessGUI:
         self.notation_text.config(state="disabled")
 
     def on_click_notation(self, event):
-
+        """Funkcija koja se poziva kad korisnik klikne na notaciju."""
         index = self.notation_text.index(f"@{event.x},{event.y}")
-
-        print(f"Clicked on index: {index}")
+        print(index)
+        
         clicked_text = self.get_full_move_text(index)
         print(f"Clicked on move: {clicked_text}")
 
+        closest_fen = None
+        closest_move_idx = None
+        print(f"fen dict: {self.fen_dict}")
+
+        for fen, moves in self.fen_dict.items():
+            for san_move, move_idx in moves:
+                if self.notation_text.compare(index, ">=", move_idx):
+                    closest_fen = fen
+                    closest_move_idx = move_idx
+                    clicked_san_move = san_move
+
+        if closest_fen and closest_move_idx:
+            print(f"Corresponding FEN before move: {closest_fen}")
+
+            self.board.set_fen(closest_fen)
+
+            if clicked_san_move:
+                move = self.board.parse_san(clicked_san_move)
+                self.board.push(move)
+
+            self.update_current_node(clicked_san_move, closest_fen) 
+
+            self.draw_board()
+            self.highlight_move(closest_move_idx)
+        else:
+            print("No matching FEN found.")
+
+    def highlight_move(self, move_idx):
+        """Označi potez u notaciji."""
+        self.notation_text.config(state="normal")
+        
+        self.notation_text.tag_remove("highlight", "1.0", tk.END)
+        
+        end_idx = f"{move_idx} + {len(self.get_full_move_text(move_idx))}c"
+        self.notation_text.tag_add("highlight", move_idx, end_idx)
+ 
+        self.notation_text.tag_config("highlight", background="yellow", foreground="black", font=("Inter", 16, "bold"))
+
+        self.notation_text.config(state="disabled")
+
+    def update_current_node(self, san_move, target_fen):
+        """Ažurira current_node i sinkronizira ploču (self.board) s odgovarajućim potezom."""
+        stack = [(self.game, chess.Board())]
+        self.board.reset()
+
+        while stack:
+            node, board_copy = stack.pop()
+
+            for variation in node.variations:
+                fen_before_move = board_copy.fen()
+                if fen_before_move == target_fen and board_copy.san(variation.move) == san_move:
+                    self.current_node = variation 
+
+                    self.board.push(variation.move)
+                    print(f"current_node ažuriran na: {self.current_node}")
+                    return
+
+                new_board = board_copy.copy()
+                new_board.push(variation.move)
+                stack.append((variation, new_board))
+
+                self.board.push(variation.move)
+
+
     def get_full_move_text(self, index):
+        """Proširi pretragu unatrag i naprijed kako bi dohvatili cijeli potez, ali bez razmaka."""
         start_index = index
         while True:
             char_before = self.notation_text.get(f"{start_index} - 1 char", start_index)
@@ -474,4 +540,3 @@ def open_analysis_board_window():
     kibitzer_button.config(command=lambda: select_button(kibitzer_button, buttons, content_frames, chess_gui))
 
     select_button(notation_button, buttons, content_frames, chess_gui)
-    #chess_gui.update_notation()
