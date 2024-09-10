@@ -1,13 +1,12 @@
 from PIL import Image, ImageTk
-import chess.svg
-import cairosvg
+import chess.svg # type: ignore
+import cairosvg # type: ignore
 
 def load_and_resize_image(path, size):
     """Loads an image from a given path and resizes it to the given size."""
     image = Image.open(path)
     image = image.resize(size, Image.LANCZOS)
     return image  # PIL.Image objekt
-
 
 def load_and_resize_image_PhotoImage(path, size):
     """Loads an image from a given path and resizes it to the given size."""

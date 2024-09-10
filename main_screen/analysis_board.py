@@ -37,7 +37,9 @@ class ChessGUI:
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
 
-        self.notation_text.bind("<Button-1>", self.on_click_notation)
+        # Gumb za promociju varijante (početno je skriven)
+        self.promote_button = tk.Button(nav_frame, text="Promote to Main", command=self.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+        self.promote_button.pack_forget()
 
     def board_to_image(self, size):
         arrows = [chess.svg.Arrow(square, square, color="#033313") for square in self.highlighted_squares]
@@ -107,6 +109,12 @@ class ChessGUI:
                 
                 self.update_notation(current_move=promotion_move)
                 self.board.push(promotion_move)
+                
+                if self.current_node.is_main_variation():
+                    self.promote_button.pack_forget()
+                else:
+                    self.promote_button.pack(side="top", pady=10)
+                
                 self.selected_square = None
                 self.highlighted_squares = []
 
@@ -182,6 +190,11 @@ class ChessGUI:
 
                     self.update_notation(current_move=move)
                     self.board.push(move)
+
+                    if self.current_node.is_main_variation():
+                        self.promote_button.pack_forget()
+                    else:
+                        self.promote_button.pack(side="top", pady=10)
                     
                     self.selected_square = None
                     self.highlighted_squares = []
@@ -209,6 +222,12 @@ class ChessGUI:
             self.current_node = self.current_node.parent
             if len(self.board.move_stack) > 0:
                 self.board.pop()
+
+            if self.current_node.is_main_variation():
+                self.promote_button.pack_forget()
+            else:
+                self.promote_button.pack(side="top", pady=10)                
+        
             if len(self.board.move_stack) > 0:
                 self.board.pop()
 
@@ -227,12 +246,14 @@ class ChessGUI:
             if len(self.current_node.variations) == 1:
                 move = self.current_node.variations[0].move
                 self.update_notation(current_move=move)
-                self.board.push(move) 
-                self.current_node = self.current_node.variations[0] 
+                self.board.push(move)  
+                self.current_node = self.current_node.variations[0]
                 self.current_move_index += 1
+
                 self.update_board()
+
             else:
-                self.show_variation_menu()
+                self.show_variation_menu() 
         else:
             print("No next move available!")
 
@@ -240,6 +261,8 @@ class ChessGUI:
         variation_window = tk.Toplevel(self.analysisWindow)
         variation_window.title("Choose a Variation")
         variation_window.geometry("300x200")
+
+        variation_window.grab_set()
 
         listbox = tk.Listbox(variation_window, font=("Inter", 18))
         listbox.pack(fill=tk.BOTH, padx=10, pady=15, expand=True)
@@ -254,6 +277,12 @@ class ChessGUI:
                 self.board.push(move)
                 self.current_move_index += 1
                 self.update_board()
+
+                if selected_index[0] == 0: 
+                    self.promote_button.pack_forget()
+                else:
+                    self.promote_button.pack(side="top", pady=10)
+
                 variation_window.destroy()
 
         for i, variation in enumerate(self.current_node.variations):
@@ -267,24 +296,33 @@ class ChessGUI:
         listbox.bind("<Double-Button-1>", select_variation)
         listbox.focus_set()
 
-        def move_up(event):
-            current_selection = listbox.curselection()
-            if current_selection:
-                current_index = current_selection[0]
-                if current_index > 0:
-                    listbox.selection_clear(current_index)
-                    listbox.selection_set(current_index - 1)
+    def promote_to_main_variation(self):
+        if not self.current_node.is_main_variation():
+            parent_node = self.current_node.parent
+            parent_node.promote(self.current_node)  
 
-        def move_down(event):
-            current_selection = listbox.curselection()
-            if current_selection:
-                current_index = current_selection[0]
-                if current_index < listbox.size() - 1:
-                    listbox.selection_clear(current_index)
-                    listbox.selection_set(current_index + 1)
+            self.update_notation(current_move=self.current_node.move)
 
-        listbox.bind("<Up>", move_up)
-        listbox.bind("<Down>", move_down)
+            self.highlight_promoted_move_with_fen(self.current_node.move)
+        
+    def highlight_promoted_move_with_fen(self, move):
+        """Boldanje poteza pomoću kombinacije FEN-a prethodne pozicije i SAN poteza"""
+        self.notation_text.tag_remove("highlight", "1.0", tk.END) 
+
+        previous_fen = self.current_node.parent.board().fen() if self.current_node.parent else None
+
+        if previous_fen and previous_fen in self.fen_dict:
+            temp_board = self.current_node.parent.board()
+
+            promoted_move_san = temp_board.san(move)
+
+            san_list = self.fen_dict[previous_fen]
+            for san_move, move_idx, var_idx in san_list:
+                if san_move == promoted_move_san:
+                    end_idx = f"{move_idx} + {len(san_move)} chars"
+                    self.notation_text.tag_add("highlight", move_idx, end_idx)
+                    self.notation_text.tag_config("highlight", background="yellow", foreground="black", font=("Inter", 16, "bold"))
+                    return
 
     def update_notation(self, current_move=None):
         """Ažuriramo PGN notaciju i ističemo trenutni potez."""
@@ -298,16 +336,14 @@ class ChessGUI:
 
         self.fen_dict = {}
 
-        stack = [(self.game, chess.Board(), "1.0")]
+        stack = [(self.game, chess.Board(), "1.0", 0)] 
 
         while stack:
-            node, board, current_position = stack.pop()
+            node, board, current_position, variation_index = stack.pop()
 
-            # Prolazimo kroz sve varijante
-            for variation in node.variations:
+            for i, variation in enumerate(node.variations):
                 move = variation.move
 
-                # Spremamo FEN poziciju prije nego što je potez odigran
                 pre_move_fen = board.fen()
 
                 if move not in board.legal_moves:
@@ -323,15 +359,13 @@ class ChessGUI:
                     print(f"Potez {san_move} nije pronađen u tekstu.")
                     continue
 
-                if move_idx:
-                    if pre_move_fen not in self.fen_dict:
-                        self.fen_dict[pre_move_fen] = [(san_move, move_idx)]
-                    else:
-                        self.fen_dict[pre_move_fen].append((san_move, move_idx))
-
+                if pre_move_fen not in self.fen_dict:
+                    self.fen_dict[pre_move_fen] = [(san_move, move_idx, i)]
+                else:
+                    self.fen_dict[pre_move_fen].append((san_move, move_idx, i))
 
                 current_position = self.notation_text.index(f"{move_idx} + {len(san_move)}c")
-                stack.append((variation, board.copy(), current_position))
+                stack.append((variation, board.copy(), current_position, i)) 
                 board.pop()
 
         if current_move:
@@ -341,115 +375,26 @@ class ChessGUI:
                 if current_fen in self.fen_dict:
                     san_list = self.fen_dict[current_fen]
                     if len(san_list) == 1:
-                        san_move, move_idx = san_list[0]
+                        san_move, move_idx, var_idx = san_list[0]
                         end_idx = f"{move_idx} + {len(san_move)} chars"
                         self.notation_text.tag_add("highlight", move_idx, end_idx)
                     else:
-                        # Ako postoji više poteza s istim FEN-om, usporedimo SAN
-                        for san_move, move_idx in san_list:
+                        # Ako postoji više poteza s istim FEN-om, usporedimo SAN i varijaciju
+                        for san_move, move_idx, var_idx in san_list:
                             if san_move == self.board.san(current_move):
                                 end_idx = f"{move_idx} + {len(san_move)} chars"
                                 self.notation_text.tag_add("highlight", move_idx, end_idx)
                                 break
                 else:
                     print("FEN nije pronađen u rječniku!")
+                    print(self.fen_dict)
+                    print(f"TRAZENI FEN: {current_fen}")
             except AssertionError:
                 print(f"Potez {current_move} nije legalan u trenutnoj poziciji.")
                 print(self.board)
 
         self.notation_text.tag_config("highlight", background="yellow", foreground="black", font=("Inter", 16, "bold"))
         self.notation_text.config(state="disabled")
-
-    def on_click_notation(self, event):
-        """Funkcija koja se poziva kad korisnik klikne na notaciju."""
-        index = self.notation_text.index(f"@{event.x},{event.y}")
-        print(index)
-        
-        clicked_text = self.get_full_move_text(index)
-        print(f"Clicked on move: {clicked_text}")
-
-        closest_fen = None
-        closest_move_idx = None
-        print(f"fen dict: {self.fen_dict}")
-
-        for fen, moves in self.fen_dict.items():
-            for san_move, move_idx in moves:
-                if self.notation_text.compare(index, ">=", move_idx):
-                    closest_fen = fen
-                    closest_move_idx = move_idx
-                    clicked_san_move = san_move
-
-        if closest_fen and closest_move_idx:
-            print(f"Corresponding FEN before move: {closest_fen}")
-
-            self.board.set_fen(closest_fen)
-
-            if clicked_san_move:
-                move = self.board.parse_san(clicked_san_move)
-                self.board.push(move)
-
-            self.update_current_node(clicked_san_move, closest_fen) 
-
-            self.draw_board()
-            self.highlight_move(closest_move_idx)
-        else:
-            print("No matching FEN found.")
-
-    def highlight_move(self, move_idx):
-        """Označi potez u notaciji."""
-        self.notation_text.config(state="normal")
-        
-        self.notation_text.tag_remove("highlight", "1.0", tk.END)
-        
-        end_idx = f"{move_idx} + {len(self.get_full_move_text(move_idx))}c"
-        self.notation_text.tag_add("highlight", move_idx, end_idx)
- 
-        self.notation_text.tag_config("highlight", background="yellow", foreground="black", font=("Inter", 16, "bold"))
-
-        self.notation_text.config(state="disabled")
-
-    def update_current_node(self, san_move, target_fen):
-        """Ažurira current_node i sinkronizira ploču (self.board) s odgovarajućim potezom."""
-        stack = [(self.game, chess.Board())]
-        self.board.reset()
-
-        while stack:
-            node, board_copy = stack.pop()
-
-            for variation in node.variations:
-                fen_before_move = board_copy.fen()
-                if fen_before_move == target_fen and board_copy.san(variation.move) == san_move:
-                    self.current_node = variation 
-
-                    self.board.push(variation.move)
-                    print(f"current_node ažuriran na: {self.current_node}")
-                    return
-
-                new_board = board_copy.copy()
-                new_board.push(variation.move)
-                stack.append((variation, new_board))
-
-                self.board.push(variation.move)
-
-
-    def get_full_move_text(self, index):
-        """Proširi pretragu unatrag i naprijed kako bi dohvatili cijeli potez, ali bez razmaka."""
-        start_index = index
-        while True:
-            char_before = self.notation_text.get(f"{start_index} - 1 char", start_index)
-            if char_before.isspace() or char_before == "" or start_index == "1.0":
-                break
-            start_index = self.notation_text.index(f"{start_index} - 1 char")
-
-        end_index = index
-        while True:
-            char_after = self.notation_text.get(end_index, f"{end_index} + 1 char")
-            if char_after.isspace() or char_after == "" or end_index == tk.END:
-                break
-            end_index = self.notation_text.index(f"{end_index} + 1 char")
-
-        move_text = self.notation_text.get(start_index, end_index).strip()
-        return move_text
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:
@@ -466,6 +411,7 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
         chess_gui.nav_frame.pack(side="bottom", padx=20)
     else:
         chess_gui.notation_text.pack_forget()
+        chess_gui.promote_button.forget()
         chess_gui.nav_frame.pack_forget()
 
 def open_analysis_board_window():
@@ -514,13 +460,21 @@ def open_analysis_board_window():
 
     content_frames = [notation_frame, reference_frame, kibitzer_frame]
 
-    notation_text = tk.Text(info_frame, font=("Inter", 16), bg="#F8E7BB", fg="#000000", wrap="word", state="disabled", relief="flat")
-    notation_text.pack(fill="both", expand=True)
-    
-    nav_frame = tk.Frame(info_frame, bg="#F8E7BB")
+    notation_text_height = screen_height // 50
+    notation_text = tk.Text(notation_frame, font=("Inter", 16), bg="#F8E7BB", fg="#000000", wrap="word", state="disabled", relief="flat", height=notation_text_height)
+    notation_text.pack(side="top", fill="x", padx=10, pady=10)
+
+    notation_control_frame = tk.Frame(notation_frame, bg="#F8E7BB")
+    notation_control_frame.pack(side="bottom", pady=10)
+
+    nav_frame = tk.Frame(notation_control_frame, bg="#F8E7BB")
 
     board = chess.Board()
     chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame)
+
+    promote_button = tk.Button(notation_control_frame, text="Promote to Main", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    chess_gui.promote_button = promote_button
+    promote_button.pack_forget()
 
     prev_button = tk.Button(nav_frame, text="⟨", command=chess_gui.prev_move, font=("Inter", 24, "bold"), bg="#F2CA5C", fg="#660000", bd=0, width=20, height=2)
     prev_button.config(highlightbackground="#480202", highlightthickness=4)
@@ -530,10 +484,10 @@ def open_analysis_board_window():
     next_button.config(highlightbackground="#480202", highlightthickness=4)
     next_button.pack(side="left")
 
+    nav_frame.pack(side="top", pady=10)
+
     analysisWindow.bind("<Left>", lambda event: chess_gui.prev_move())
     analysisWindow.bind("<Right>", lambda event: chess_gui.next_move())
-
-    nav_frame.pack_forget()
 
     notation_button.config(command=lambda: select_button(notation_button, buttons, content_frames, chess_gui))
     reference_button.config(command=lambda: select_button(reference_button, buttons, content_frames, chess_gui))
