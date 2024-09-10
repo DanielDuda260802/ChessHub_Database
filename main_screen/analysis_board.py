@@ -37,9 +37,13 @@ class ChessGUI:
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
 
-        # Gumb za promociju varijante (početno je skriven)
-        self.promote_button = tk.Button(nav_frame, text="Promote to Main", command=self.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-        self.promote_button.pack_forget()
+
+        self.variation_control_frame = tk.Frame(nav_frame, bg="#F8E7BB")
+        self.variation_control_frame.pack(side="top", pady=10)
+        self.promote_button = tk.Button(self.variation_control_frame, text="Promote to Main", command=self.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+        self.delete_button = tk.Button(self.variation_control_frame, text="Delete", command=self.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+
+        self.hide_variation_controls()
 
     def board_to_image(self, size):
         arrows = [chess.svg.Arrow(square, square, color="#033313") for square in self.highlighted_squares]
@@ -111,9 +115,9 @@ class ChessGUI:
                 self.board.push(promotion_move)
                 
                 if self.current_node.is_main_variation():
-                    self.promote_button.pack_forget()
+                    self.hide_variation_controls()
                 else:
-                    self.promote_button.pack(side="top", pady=10)
+                    self.show_variation_controls()
                 
                 self.selected_square = None
                 self.highlighted_squares = []
@@ -176,7 +180,7 @@ class ChessGUI:
                         if variation.move == move:
                             matching_variation = variation
                             break
-                    
+                
                     if matching_variation:
                         # ako postoji, postavi current_node na varijantu s tim potezom
                         self.current_node = matching_variation
@@ -192,9 +196,9 @@ class ChessGUI:
                     self.board.push(move)
 
                     if self.current_node.is_main_variation():
-                        self.promote_button.pack_forget()
+                        self.hide_variation_controls()
                     else:
-                        self.promote_button.pack(side="top", pady=10)
+                        self.show_variation_controls()
                     
                     self.selected_square = None
                     self.highlighted_squares = []
@@ -224,9 +228,9 @@ class ChessGUI:
                 self.board.pop()
 
             if self.current_node.is_main_variation():
-                self.promote_button.pack_forget()
+                self.hide_variation_controls()
             else:
-                self.promote_button.pack(side="top", pady=10)                
+                self.show_variation_controls()              
         
             if len(self.board.move_stack) > 0:
                 self.board.pop()
@@ -279,9 +283,9 @@ class ChessGUI:
                 self.update_board()
 
                 if selected_index[0] == 0: 
-                    self.promote_button.pack_forget()
+                    self.hide_variation_controls()
                 else:
-                    self.promote_button.pack(side="top", pady=10)
+                    self.show_variation_controls()
 
                 variation_window.destroy()
 
@@ -304,9 +308,41 @@ class ChessGUI:
             self.update_notation(current_move=self.current_node.move)
 
             self.highlight_promoted_move_with_fen(self.current_node.move)
+
+            if not self.current_node.is_main_variation():
+                self.promote_button.pack(side="left", padx=5)
+                self.delete_button.pack(side="left", padx=5)
+            else:
+                self.promote_button.forget()
+                self.delete_button.forget()
+
+    def delete_variation(self):
+        if not self.current_node.is_main_variation():
+            parent_node = self.current_node.parent
+            parent_node.remove_variation(self.current_node)
+
+            self.current_node = parent_node
+
+            self.update_notation(current_move=self.current_node.move)
+            self.highlight_promoted_move_with_fen(self.current_node.move)
+            self.update_board()
+            
+            if not self.current_node.is_main_variation():
+                self.promote_button.pack(side="left", padx=5)
+                self.delete_button.pack(side="left", padx=5)
+            else:
+                self.promote_button.forget()
+                self.delete_button.forget()
+                    
+    def show_variation_controls(self):
+        self.promote_button.pack(side="left", padx=5)
+        self.delete_button.pack(side="left", padx=5)
+
+    def hide_variation_controls(self):
+        self.promote_button.pack_forget()
+        self.delete_button.pack_forget()
         
     def highlight_promoted_move_with_fen(self, move):
-        """Boldanje poteza pomoću kombinacije FEN-a prethodne pozicije i SAN poteza"""
         self.notation_text.tag_remove("highlight", "1.0", tk.END) 
 
         previous_fen = self.current_node.parent.board().fen() if self.current_node.parent else None
@@ -325,7 +361,6 @@ class ChessGUI:
                     return
 
     def update_notation(self, current_move=None):
-        """Ažuriramo PGN notaciju i ističemo trenutni potez."""
         self.notation_text.config(state="normal")
         self.notation_text.delete(1.0, tk.END)
 
@@ -411,7 +446,6 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
         chess_gui.nav_frame.pack(side="bottom", padx=20)
     else:
         chess_gui.notation_text.pack_forget()
-        chess_gui.promote_button.forget()
         chess_gui.nav_frame.pack_forget()
 
 def open_analysis_board_window():
@@ -472,9 +506,13 @@ def open_analysis_board_window():
     board = chess.Board()
     chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame)
 
-    promote_button = tk.Button(notation_control_frame, text="Promote to Main", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    promote_button = tk.Button(notation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    delete_button = tk.Button(notation_control_frame, text="Delete", command=chess_gui.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    
     chess_gui.promote_button = promote_button
-    promote_button.pack_forget()
+    chess_gui.delete_button = delete_button
+
+    chess_gui.hide_variation_controls()
 
     prev_button = tk.Button(nav_frame, text="⟨", command=chess_gui.prev_move, font=("Inter", 24, "bold"), bg="#F2CA5C", fg="#660000", bd=0, width=20, height=2)
     prev_button.config(highlightbackground="#480202", highlightthickness=4)
