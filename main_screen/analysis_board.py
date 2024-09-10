@@ -40,8 +40,9 @@ class ChessGUI:
 
         self.variation_control_frame = tk.Frame(nav_frame, bg="#F8E7BB")
         self.variation_control_frame.pack(side="top", pady=10)
-        self.promote_button = tk.Button(self.variation_control_frame, text="Promote to Main", command=self.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+        self.promote_button = tk.Button(self.variation_control_frame, text="Promote", command=self.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
         self.delete_button = tk.Button(self.variation_control_frame, text="Delete", command=self.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+        self.demote_button = tk.Button(self.variation_control_frame, text="Demote", command=self.demote_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
 
         self.hide_variation_controls()
 
@@ -114,10 +115,7 @@ class ChessGUI:
                 self.update_notation(current_move=promotion_move)
                 self.board.push(promotion_move)
                 
-                if self.current_node.is_main_variation():
-                    self.hide_variation_controls()
-                else:
-                    self.show_variation_controls()
+                self.update_variation_controls()
                 
                 self.selected_square = None
                 self.highlighted_squares = []
@@ -195,10 +193,7 @@ class ChessGUI:
                     self.update_notation(current_move=move)
                     self.board.push(move)
 
-                    if self.current_node.is_main_variation():
-                        self.hide_variation_controls()
-                    else:
-                        self.show_variation_controls()
+                    self.update_variation_controls()
                     
                     self.selected_square = None
                     self.highlighted_squares = []
@@ -225,12 +220,7 @@ class ChessGUI:
         if self.current_node.parent:            
             self.current_node = self.current_node.parent
             if len(self.board.move_stack) > 0:
-                self.board.pop()
-
-            if self.current_node.is_main_variation():
-                self.hide_variation_controls()
-            else:
-                self.show_variation_controls()              
+                self.board.pop()           
         
             if len(self.board.move_stack) > 0:
                 self.board.pop()
@@ -241,6 +231,7 @@ class ChessGUI:
                 self.board.push(self.current_node.move)
             self.current_move_index -= 1
 
+            self.update_variation_controls()  
             self.update_board()
         else:
             print("No previous move available!")
@@ -255,7 +246,7 @@ class ChessGUI:
                 self.current_move_index += 1
 
                 self.update_board()
-
+                self.update_variation_controls()
             else:
                 self.show_variation_menu() 
         else:
@@ -281,11 +272,7 @@ class ChessGUI:
                 self.board.push(move)
                 self.current_move_index += 1
                 self.update_board()
-
-                if selected_index[0] == 0: 
-                    self.hide_variation_controls()
-                else:
-                    self.show_variation_controls()
+                self.update_variation_controls()
 
                 variation_window.destroy()
 
@@ -309,12 +296,7 @@ class ChessGUI:
 
             self.highlight_promoted_move_with_fen(self.current_node.move)
 
-            if not self.current_node.is_main_variation():
-                self.promote_button.pack(side="left", padx=5)
-                self.delete_button.pack(side="left", padx=5)
-            else:
-                self.promote_button.forget()
-                self.delete_button.forget()
+        self.update_variation_controls()       
 
     def delete_variation(self):
         if not self.current_node.is_main_variation():
@@ -327,20 +309,87 @@ class ChessGUI:
             self.highlight_promoted_move_with_fen(self.current_node.move)
             self.update_board()
             
-            if not self.current_node.is_main_variation():
-                self.promote_button.pack(side="left", padx=5)
-                self.delete_button.pack(side="left", padx=5)
+        self.update_variation_controls()
+
+    def demote_variation(self):
+        if self.current_node.has_variation:
+            parent_node = self.current_node.parent
+            parent_node.demote(self.current_node)
+
+            self.update_notation(current_move=self.current_node.move)
+            self.highlight_promoted_move_with_fen(self.current_node.move)
+        
+        self.update_variation_controls()
+
+    def get_halfmove_count_from_fen(self, fen):
+        fen_parts = fen.split()
+        return int(fen_parts[4]) + int(fen_parts[5])
+
+    def update_variation_controls(self):
+        parent_node = self.current_node.parent
+        if parent_node:
+            current_fen = self.current_node.board().fen()
+            current_half_moves = self.get_halfmove_count_from_fen(current_fen)
+
+            filtered_variations = []
+            for variation in parent_node.variations:
+                temp_board = parent_node.board().copy()
+
+                temp_board.push(variation.move)
+
+                variation_fen = temp_board.fen()
+                variation_half_moves = self.get_halfmove_count_from_fen(variation_fen)
+
+                if variation_half_moves == current_half_moves:
+                    filtered_variations.append(variation)
+
+            # Ako je trenutni čvor glavna varijanta
+            if self.current_node.is_main_variation():
+                # Provjeri ima li drugih podvarijanti osim trenutnog poteza
+                if len(filtered_variations) > 1:
+                    print("Glavna varijanta ima podvarijante.")
+                    self.promote_button.pack_forget()
+                    self.delete_button.pack_forget()
+                    self.demote_button.pack(side="left", padx=5)
+                else:
+                    print("Glavna varijanta nema podvarijanti.")
+                    self.promote_button.pack_forget()
+                    self.delete_button.pack_forget()
+                    self.demote_button.pack_forget()
             else:
-                self.promote_button.forget()
-                self.delete_button.forget()
-                    
-    def show_variation_controls(self):
-        self.promote_button.pack(side="left", padx=5)
-        self.delete_button.pack(side="left", padx=5)
+                filtered_variations_second = []
+                for variation in self.current_node.variations:
+                    temp_board = self.current_node.board().copy()
+                    temp_board.push(variation.move)
+
+                    variation_fen = temp_board.fen()
+                    variation_half_moves = self.get_halfmove_count_from_fen(variation_fen)
+
+                    if variation_half_moves == current_half_moves:
+                        filtered_variations_second.append(variation)
+
+                if len(filtered_variations_second) > 1:
+                    print("Podvarijanta s alternativama.")
+                    self.promote_button.pack(side="left", padx=5)
+                    self.demote_button.pack(side="left", padx=5)
+                    self.delete_button.pack_forget()
+                else:
+                    print("Podvarijanta bez alternativa.")
+                    print("Prikazujem promote i demote gumbe.")
+                    self.promote_button.pack(side="left", padx=5)
+                    self.demote_button.pack_forget()
+                    self.delete_button.pack(side="left", padx=5)
+                    self.analysisWindow.update()
+        else:
+            print("Nema nadređenog čvora, početak partije.")
+            self.promote_button.pack_forget()
+            self.delete_button.pack_forget()
+            self.demote_button.pack_forget()
 
     def hide_variation_controls(self):
         self.promote_button.pack_forget()
         self.delete_button.pack_forget()
+        self.demote_button.pack_forget()
         
     def highlight_promoted_move_with_fen(self, move):
         self.notation_text.tag_remove("highlight", "1.0", tk.END) 
@@ -428,7 +477,7 @@ class ChessGUI:
                 print(f"Potez {current_move} nije legalan u trenutnoj poziciji.")
                 print(self.board)
 
-        self.notation_text.tag_config("highlight", background="yellow", foreground="black", font=("Inter", 16, "bold"))
+        self.notation_text.tag_config("highlight", foreground="black", font=("Inter", 16, "bold"))
         self.notation_text.config(state="disabled")
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
@@ -508,10 +557,11 @@ def open_analysis_board_window():
 
     promote_button = tk.Button(notation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
     delete_button = tk.Button(notation_control_frame, text="Delete", command=chess_gui.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-    
+    demote_button = tk.Button(notation_control_frame, text="Demote", command=chess_gui.demote_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+
     chess_gui.promote_button = promote_button
     chess_gui.delete_button = delete_button
-
+    chess_gui.demote_button = demote_button
     chess_gui.hide_variation_controls()
 
     prev_button = tk.Button(nav_frame, text="⟨", command=chess_gui.prev_move, font=("Inter", 24, "bold"), bg="#F2CA5C", fg="#660000", bd=0, width=20, height=2)
