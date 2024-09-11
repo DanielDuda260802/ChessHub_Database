@@ -199,6 +199,8 @@ class ChessGUI:
                     self.selected_square = None
                     self.highlighted_squares = []
                     
+                    if self.reference_frame.winfo_ismapped():
+                        self.reference()
 
                     self.draw_board()
                     
@@ -234,6 +236,9 @@ class ChessGUI:
 
             self.update_variation_controls()  
             self.update_board()
+
+            if self.reference_frame.winfo_ismapped():
+                self.reference()
         else:
             print("No previous move available!")
 
@@ -248,6 +253,9 @@ class ChessGUI:
 
                 self.update_board()
                 self.update_variation_controls()
+
+                if self.reference_frame.winfo_ismapped():
+                    self.reference()
             else:
                 self.show_variation_menu() 
         else:
@@ -274,6 +282,8 @@ class ChessGUI:
                 self.current_move_index += 1
                 self.update_board()
                 self.update_variation_controls()
+                if self.reference_frame.winfo_ismapped():
+                    self.reference()
 
                 variation_window.destroy()
 
@@ -479,13 +489,26 @@ class ChessGUI:
         self.notation_text.tag_config("highlight", foreground="black", font=("Inter", 16, "bold"))
         self.notation_text.config(state="disabled")
 
-    def reference(self):
-
-        columns = ('White', 'Black', 'White Elo', 'Black Elo', 'Result', 'Event Date', 'Tournament', 'Year')
-        
+    def reference(self):    
         for widget in self.reference_frame.winfo_children():
             widget.destroy()
 
+        next_moves_info_frame = tk.Frame(self.reference_frame, bg="#F8E7BB")
+        next_moves_info_frame.pack(side="top", fill="x")
+
+        next_moves_columns = ('Move', 'Games', 'Score', 'Last Played', 'Best Players')
+        next_moves_tree = ttk.Treeview(next_moves_info_frame, columns=next_moves_columns, show='headings')
+
+        for col in next_moves_columns:
+            next_moves_tree.heading(col, text=col)
+            next_moves_tree.column(col, width=100)
+
+        next_moves_tree.pack(fill=tk.BOTH, expand=True)
+
+        tree_frame = tk.Frame(self.reference_frame)
+        tree_frame.pack(side="top", fill=tk.BOTH, expand=True)
+
+        columns = ('Number', 'White', 'Elo W', 'Black', 'Elo B', 'Result', 'Tournament', 'Year')
         tree = ttk.Treeview(self.reference_frame, columns=columns, show='headings')
 
         for col in columns:
@@ -498,8 +521,21 @@ class ChessGUI:
         chess_db = database_utils.ChessDatabase()
         games = chess_db.get_game_data_for_fen(fen_hash)
 
+        next_moves, last_played_year, best_players_played_move = self.get_next_moves(current_fen, games)
+
+        # Sortiraj poteze prema broju odigranih partija (Games) silazno
+        sorted_next_moves = sorted(next_moves.items(), key=lambda x: x[1], reverse=True)
+
+        for move, count in sorted_next_moves:
+            score = self.calculate_score_for_move(current_fen, move)
+            last_played = last_played_year.get(move, '---')
+            best_players = best_players_played_move.get(move, ['---', '---'])
+            best_players_str = ', '.join(best_players)
+            next_moves_tree.insert('', tk.END, values=(move, count, f"{score}%", last_played, best_players_str))
+        
         for game in games:
-            tree.insert('', tk.END, values=game)
+            game_id, white, black, white_elo, black_elo, result, event_date, site, date, notation = game
+            tree.insert('', tk.END, values=(game_id, white, white_elo, black, black_elo, result, site, date))
 
         tree.pack(fill=tk.BOTH, expand=True)
 
@@ -507,15 +543,140 @@ class ChessGUI:
             selected_item = tree.selection()
             if selected_item:
                 game_data = tree.item(selected_item)["values"] 
-
-                white_player = game_data[0]
-                black_player = game_data[1]
-                event_date = game_data[5]  
-                
-                
                 chess_board.open_game_window(game_data[0], "games")
 
         tree.bind("<Double-1>", on_item_double_click)
+
+    def get_next_moves(self, fen, games):
+        next_moves = {}
+        last_played_year = {}
+        best_players_played_move = {}
+        start_fen = chess.STARTING_FEN
+
+        for game in games:
+            notation = game[-1] 
+            moves = notation.split()
+            year = game[8][:4]
+
+            moves = [move for move in moves if not move.endswith('.') and move not in ['1-0', '0-1', '1/2-1/2']]
+            
+            temp_board = chess.Board()  
+
+            if fen == start_fen:  
+                if moves:
+                    first_move = moves[0]
+                    if first_move in next_moves:
+                        next_moves[first_move] += 1
+                        if last_played_year[first_move] < year:
+                            last_played_year[first_move] = year
+                    else:
+                        next_moves[first_move] = 1
+                        last_played_year[first_move] = year
+                        best_players_played_move[first_move] = self.calculate_best_players_for_move(fen, first_move)
+                continue
+
+            for i, move in enumerate(moves):
+                try:
+                    temp_board.push_san(move.strip())  
+                except chess.InvalidMoveError:
+                    print(f"Invalid move: {move}")
+                    continue
+
+                if temp_board.fen() == fen:
+                    if i + 1 < len(moves):
+                        next_move = moves[i + 1]
+                        if next_move in next_moves:
+                            next_moves[next_move] += 1
+                            if last_played_year[next_move] < year:
+                                last_played_year[next_move] = year
+                        else:
+                            next_moves[next_move] = 1
+                            last_played_year[next_move] = year
+                            best_players_played_move[next_move] = self.calculate_best_players_for_move(fen, next_move)
+                    break
+
+        return next_moves, last_played_year, best_players_played_move
+
+    def calculate_score_for_move(self, current_fen, move):
+        temp_board = chess.Board()
+        temp_board.set_fen(current_fen)
+
+        try:
+            temp_board.push_san(move)  
+        except chess.InvalidMoveError:
+            print(f"Invalid move: {move}")
+            return 0
+
+        next_fen = temp_board.fen()
+
+        chess_db = database_utils.ChessDatabase()
+        games_with_next_fen = chess_db.get_game_data_for_fen(helper_methods.hash_fen(next_fen))
+
+        wins, draws, losses = 0, 0, 0
+        total_games = len(games_with_next_fen)
+        is_white_to_move = next_fen.split()[1]
+
+        for game in games_with_next_fen:
+            result = game[5]
+
+            if is_white_to_move:
+                if result == '1-0':
+                    wins += 1
+                elif result == '1/2-1/2':
+                    draws += 1
+                elif result == '0-1':
+                    losses += 1
+            else:
+                if result == '0-1':
+                    wins += 1
+                elif result == '1/2-1/2':
+                    draws += 1
+                elif result == '1-0':
+                    losses += 1
+
+        if total_games > 0:
+            score = (wins + draws)/total_games
+
+        return round(score * 100, 2)
+    
+    def calculate_best_players_for_move(self, current_fen, move):
+        temp_board = chess.Board()
+        temp_board.set_fen(current_fen)
+
+        try:
+            temp_board.push_san(move)  
+        except chess.InvalidMoveError:
+            print(f"Invalid move: {move}")
+            return []
+
+        next_fen = temp_board.fen()
+
+        chess_db = database_utils.ChessDatabase()
+        games_with_next_fen = chess_db.get_game_data_for_fen(helper_methods.hash_fen(next_fen))
+
+        players = []
+
+        for game in games_with_next_fen:
+            white_player = game[1]  
+            black_player = game[2]  
+            white_elo = game[3]     
+            black_elo = game[4]
+
+            is_white_to_move = next_fen.split()[1] == 'w'
+
+            if not is_white_to_move:
+                white_elo = white_elo if isinstance(white_elo, int) else 0
+                if (white_player) not in players:  # Provjerimo je li već na listi
+                    players.append((white_player, white_elo))
+            else:
+                black_elo = black_elo if isinstance(black_elo, int) else 0
+                if (black_player) not in players:  # Provjerimo je li već na listi
+                    players.append((black_player, black_elo))
+
+        players_sorted = sorted(players, key=lambda x: x[1], reverse=True)
+        
+        best_players = [player[0] for player in players_sorted[:2]]
+        return best_players
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:

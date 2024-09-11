@@ -300,7 +300,7 @@ class ChessDatabase:
 
         # Query that finds all games that match the FEN
         cursor.execute('''
-            SELECT g.id, g.white, g.black, g.white_elo, g.black_elo, g.result, g.event_date, g.site, g.date
+            SELECT g.id, g.white, g.black, g.white_elo, g.black_elo, g.result, g.event_date, g.site, g.date, g.notation
             FROM games AS g
             JOIN fens AS f ON g.id = f.game_id
             WHERE f.fen_hash = ?
@@ -313,17 +313,16 @@ class ChessDatabase:
         
         return games
     
-    def get_game_notation_and_move_number_for_fen(self, fen_hash):
+    def get_move_number_for_fen(self, fen):
         conn = sqlite3.connect('/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/database/chess_db.sqlite')
         cursor = conn.cursor()
 
         # Query that finds all games that match the FEN and also fetches the move_number from fens
         cursor.execute('''
-            SELECT g.notation, f.move_number
-            FROM games AS g
-            JOIN fens AS f ON g.id = f.game_id
+            SELECT f.game_id, f.move_number
+            FROM fens AS f
             WHERE f.fen_hash = ?
-        ''', (fen_hash,))
+        ''', (fen,))
         
         result = cursor.fetchall()
         
