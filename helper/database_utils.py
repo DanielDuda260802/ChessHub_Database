@@ -128,10 +128,19 @@ class ChessDatabase:
                 fen = board.fen()
                 fen_hash = hash_fen(fen)
                 move_count = 0
-                fens.append({"move_number": move_count, "fen": fen, "fen_hash": fen_hash})
 
-                for move in game.mainline_moves():
-                    move_count += 1
+                moves = list(game.mainline_moves())
+                
+                # Inicijalni FEN
+                fens.append({
+                    "move_number": move_count,
+                    "fen": fen,
+                    "fen_hash": fen_hash
+                })
+
+                move_count += 1
+
+                for idx, move in enumerate(moves):
                     try:
                         if board.is_legal(move):
                             board.push(move)
@@ -142,9 +151,17 @@ class ChessDatabase:
                         print(f"Greška prilikom primjene poteza {move}. Trenutni FEN: {board.fen()}. Greška {e}")
                         break
 
+                    # Pripremi novi FEN
                     fen = board.fen()
                     fen_hash = hash_fen(fen)
-                    fens.append({"move_number": move_count, "fen": fen, "fen_hash": fen_hash})
+
+                    fens.append({
+                        "move_number": move_count,
+                        "fen": fen,
+                        "fen_hash": fen_hash
+                    })
+
+                    move_count += 1
 
                 game_data = {
                     "Site": game.headers.get("Site", ""),
@@ -166,12 +183,12 @@ class ChessDatabase:
                 # Spremi FEN-ove u bazu
                 self.save_fens_to_database(cursor, game_id, fens)
 
+                # Učitaj sljedeću partiju
                 game = chess.pgn.read_game(pgn_file)
 
         conn.commit()
         cursor.close()
         conn.close()
-
 
     def fetch_games_data_from_database(self):
         self.cursor.execute("SELECT * FROM games")
@@ -277,14 +294,42 @@ class ChessDatabase:
         self.conn.commit()
     
     # --- Reference --- 
-    def check_fen_in_database(self, fen_hash):
-        """Provjera postoji li FEN hash u bazi."""
-        query = '''
-            SELECT games.id
-            FROM fens
-            JOIN games ON fens.game_id = games.id
-            WHERE fens.fen_hash = ?
-        '''
-        self.cursor.execute(query, (fen_hash,))
-        result = self.cursor.fetchall()
+    def get_game_data_for_fen(self, fen):
+        conn = sqlite3.connect('/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/database/chess_db.sqlite')
+        cursor = conn.cursor()
+
+        # Query that finds all games that match the FEN
+        cursor.execute('''
+            SELECT g.id, g.white, g.black, g.white_elo, g.black_elo, g.result, g.event_date, g.site, g.date
+            FROM games AS g
+            JOIN fens AS f ON g.id = f.game_id
+            WHERE f.fen_hash = ?
+        ''', (fen,))
+        
+        games = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return games
+    
+    def get_game_notation_and_move_number_for_fen(self, fen_hash):
+        conn = sqlite3.connect('/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/database/chess_db.sqlite')
+        cursor = conn.cursor()
+
+        # Query that finds all games that match the FEN and also fetches the move_number from fens
+        cursor.execute('''
+            SELECT g.notation, f.move_number
+            FROM games AS g
+            JOIN fens AS f ON g.id = f.game_id
+            WHERE f.fen_hash = ?
+        ''', (fen_hash,))
+        
+        result = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
         return result
+    
+    

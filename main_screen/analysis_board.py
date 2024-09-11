@@ -1,5 +1,6 @@
 import sys
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
 import chess # type: ignore
 import chess.pgn # type: ignore
@@ -11,6 +12,7 @@ assets_dir = os.path.join(base_dir, "assets")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from helper import config, helper_methods, database_utils
+from main_screen import chess_board
 
 class ChessGUI:
     def __init__(self, root, analysisWindow, board, notation_text, nav_frame):
@@ -36,7 +38,6 @@ class ChessGUI:
 
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
-
 
         self.variation_control_frame = tk.Frame(nav_frame, bg="#F8E7BB")
         self.variation_control_frame.pack(side="top", pady=10)
@@ -478,23 +479,43 @@ class ChessGUI:
         self.notation_text.tag_config("highlight", foreground="black", font=("Inter", 16, "bold"))
         self.notation_text.config(state="disabled")
 
-    def check_current_fen_in_database(self):
-        """Provjerava postoji li trenutna FEN pozicija na ploči u bazi."""
-        # Dobivanje trenutne FEN pozicije
-        current_fen = self.board.fen()
+    def reference(self):
 
-        # Hashiraj trenutnu FEN poziciju
+        columns = ('White', 'Black', 'White Elo', 'Black Elo', 'Result', 'Event Date', 'Tournament', 'Year')
+        
+        for widget in self.reference_frame.winfo_children():
+            widget.destroy()
+
+        tree = ttk.Treeview(self.reference_frame, columns=columns, show='headings')
+
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=100)
+
+        current_fen = self.board.fen()
         fen_hash = helper_methods.hash_fen(current_fen)
 
-        # Poveži se s bazom i provjeri postoji li taj hash
         chess_db = database_utils.ChessDatabase()
-        result = chess_db.check_fen_in_database(fen_hash)
+        games = chess_db.get_game_data_for_fen(fen_hash)
 
-        # Ako postoji rezultat, prikaži podatke korisniku
-        if result:
-            print(f"FEN pozicija pronađena u bazi! Detalji partije: {result}")
-        else:
-            print("FEN pozicija nije pronađena u bazi.")
+        for game in games:
+            tree.insert('', tk.END, values=game)
+
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        def on_item_double_click(event):
+            selected_item = tree.selection()
+            if selected_item:
+                game_data = tree.item(selected_item)["values"] 
+
+                white_player = game_data[0]
+                black_player = game_data[1]
+                event_date = game_data[5]  
+                
+                
+                chess_board.open_game_window(game_data[0], "games")
+
+        tree.bind("<Double-1>", on_item_double_click)
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:
@@ -514,7 +535,7 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
         chess_gui.nav_frame.pack_forget()
 
     if selected_button["text"] == "Reference" and chess_gui:
-        chess_gui.check_current_fen_in_database()
+        chess_gui.reference()
 
 def open_analysis_board_window():
     analysisWindow = tk.Toplevel()
@@ -573,6 +594,7 @@ def open_analysis_board_window():
 
     board = chess.Board()
     chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame)
+    chess_gui.reference_frame = reference_frame
 
     promote_button = tk.Button(notation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
     delete_button = tk.Button(notation_control_frame, text="Delete", command=chess_gui.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
