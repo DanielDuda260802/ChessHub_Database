@@ -1,3 +1,4 @@
+import hashlib
 from PIL import Image, ImageTk
 import chess.svg # type: ignore
 import cairosvg # type: ignore
@@ -21,3 +22,7 @@ def board_to_image(board, size):
     output_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/assets/chessboard.png"
     cairosvg.svg2png(bytestring=svg_data, write_to=output_path)
     return output_path
+
+def hash_fen(fen):
+    """Generira hash FEN-a koristeći SHA-256 za bržu pretragu."""
+    return hashlib.sha256(fen.encode('utf-8')).hexdigest()

@@ -15,10 +15,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from helper import config
 from helper.helper_methods import board_to_image
-from helper import database_utils
+from helper.database_utils import ChessDatabase
+
+db = ChessDatabase()
 
 def open_game_window(game_id, source_table):
-    conn = database_utils.connect_to_database()
+    conn = db.connect_to_database()
     cursor = conn.cursor()
 
     if source_table == "games":

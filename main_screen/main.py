@@ -6,13 +6,15 @@ from threading import Thread
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from helper import helper_methods
-from helper import database_utils
+from helper.database_utils import ChessDatabase
 from helper import config
 import playVsComputerSetupScreen
 from analysis_board import open_analysis_board_window
 
 import tkinter as tk
 from PIL import ImageTk
+
+db = ChessDatabase()
 
 # Funkcija za kreiranje loading screen-a
 def show_loading_screen(root):
@@ -77,23 +79,32 @@ def create_icon_with_label(parent_frame, image_path, image_size, text, command=N
 def create_icon_with_table_button_myGames(content_frame, table_frame, image_path, image_size, text):
     icon_image = helper_methods.load_and_resize_image(image_path, image_size)
     icon_photo = ImageTk.PhotoImage(icon_image)
-    icon_button = tk.Button(content_frame, image=icon_photo, text=text, compound="top", command=lambda: database_utils.display_my_games(table_frame))
+    icon_button = tk.Button(content_frame, image=icon_photo, text=text, compound="top", command=lambda: db.display_my_games(table_frame))
     icon_button.image = icon_photo
     icon_button.pack(side="left", padx=20)
 
 def create_icon_with_table_button(content_frame, table_frame, image_path, image_size, text):
     icon_image = helper_methods.load_and_resize_image(image_path, image_size)
     icon_photo = ImageTk.PhotoImage(icon_image)
-    icon_button = tk.Button(content_frame, image=icon_photo, text=text, compound="top", command=lambda: database_utils.display_data(table_frame))
+    icon_button = tk.Button(content_frame, image=icon_photo, text=text, compound="top", command=lambda: db.display_data(table_frame))
     icon_button.image = icon_photo
     icon_button.pack(side="left", padx=20)
 
 def initialize_data(root, loading_screen):
-    database_utils.parse_pgn_and_store_in_db(config.pgn_file_path)
-    database_utils.create_my_games_table() 
+    db_thread = ChessDatabase()
+
+    if not db_thread.database_exists_and_has_data():
+        print("Baza ne postoji ili je prazna. Pokrećem parsiranje PGN datoteke.")
+        db_thread.parse_pgn_and_store_in_db(config.pgn_file_path)
+        db_thread.create_tables() 
+    else:
+        print("Baza već postoji i sadrži podatke. Preskačem parsiranje PGN-a.")        
+
     if os.path.exists(config.my_games_pgn_file_path):
-        database_utils.clear_my_games_table()
-        database_utils.parse_my_games_pgn(config.my_games_pgn_file_path)
+        db_thread.clear_my_games_table()
+        db_thread.parse_my_games_pgn(config.my_games_pgn_file_path)
+
+    db_thread.close_connection()
 
     loading_screen.destroy()
 

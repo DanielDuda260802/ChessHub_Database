@@ -10,7 +10,7 @@ base_dir = os.path.dirname(__file__)
 assets_dir = os.path.join(base_dir, "assets")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from helper import config
+from helper import config, helper_methods, database_utils
 
 class ChessGUI:
     def __init__(self, root, analysisWindow, board, notation_text, nav_frame):
@@ -471,14 +471,30 @@ class ChessGUI:
                                 break
                 else:
                     print("FEN nije pronađen u rječniku!")
-                    print(self.fen_dict)
-                    print(f"TRAZENI FEN: {current_fen}")
             except AssertionError:
                 print(f"Potez {current_move} nije legalan u trenutnoj poziciji.")
                 print(self.board)
 
         self.notation_text.tag_config("highlight", foreground="black", font=("Inter", 16, "bold"))
         self.notation_text.config(state="disabled")
+
+    def check_current_fen_in_database(self):
+        """Provjerava postoji li trenutna FEN pozicija na ploči u bazi."""
+        # Dobivanje trenutne FEN pozicije
+        current_fen = self.board.fen()
+
+        # Hashiraj trenutnu FEN poziciju
+        fen_hash = helper_methods.hash_fen(current_fen)
+
+        # Poveži se s bazom i provjeri postoji li taj hash
+        chess_db = database_utils.ChessDatabase()
+        result = chess_db.check_fen_in_database(fen_hash)
+
+        # Ako postoji rezultat, prikaži podatke korisniku
+        if result:
+            print(f"FEN pozicija pronađena u bazi! Detalji partije: {result}")
+        else:
+            print("FEN pozicija nije pronađena u bazi.")
 
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:
@@ -496,6 +512,9 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
     else:
         chess_gui.notation_text.pack_forget()
         chess_gui.nav_frame.pack_forget()
+
+    if selected_button["text"] == "Reference" and chess_gui:
+        chess_gui.check_current_fen_in_database()
 
 def open_analysis_board_window():
     analysisWindow = tk.Toplevel()

@@ -381,9 +381,7 @@ class ChessGUI:
     def update_notation(self):
         """Updates the notation text box with the current moves."""
         notation_str = " ".join(f"{i//2 + 1}. {self.notation_moves[i]} {self.notation_moves[i + 1] if i + 1 < len(self.notation_moves) else ''}" for i in range(0, len(self.notation_moves), 2))
-
-        print(notation_str)
-
+        
         self.notation_text.config(state="normal")
         self.notation_text.delete(1.0, tk.END)
         self.notation_text.insert(tk.END, notation_str)
