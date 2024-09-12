@@ -3,6 +3,7 @@ import os
 import sqlite3
 import sys
 from tkinter import ttk
+import tkinter as tk
 import chess  # type: ignore
 import chess.pgn  # type: ignore
 
@@ -102,7 +103,7 @@ class ChessDatabase:
 
     def save_to_gamesTable_database(self, cursor, game_data):
         insert_query = '''
-            INSERT INTO games (site, date, round, white, black, result, white_elo, black_elo, eco, event_date, move)
+            INSERT INTO games (site, date, round, white, black, result, white_elo, black_elo, eco, event_date, notation)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
         cursor.execute(insert_query, (
@@ -243,7 +244,35 @@ class ChessDatabase:
             widget.destroy()
 
         data = self.fetch_games_data_from_database()
+
+        style = ttk.Style()
+        
+        style.configure("Treeview.Heading", 
+                        font=("Inter", 14, "bold"), 
+                        background="#D9D9D9", 
+                        foreground="black", 
+                        anchor="center", 
+                        relief="solid", 
+                        bordercolor="#660000", 
+                        borderwidth=2)
+
+        style.configure("Treeview", 
+                        background="#F8E7BB",  
+                        fieldbackground="#F8E7BB", 
+                        foreground="black", 
+                        rowheight=25,
+                        font=("Inter", 12))
+
+        style.map("Treeview", 
+                background=[("selected", "#F2CA5C"), ("!selected", "#F8E7BB"), ("alternate", "#EDEDED")], 
+                foreground=[("selected", "black")],
+                bordercolor=[("!selected", "#000000")])
+        
+        preview_label = tk.Label(table_frame, text="Database preview:", font=("Inter", 16, "bold"), bg="#970303", fg="#F2CA5C", pady=10, anchor="w")
+        preview_label.pack(side="top", fill="x")
+
         tree = ttk.Treeview(table_frame, columns=("Number", "White", "Elo W", "Black", "Elo B", "Result", "Site", "Date"), show="headings", height=15)
+
         tree.heading("Number", text="Number")
         tree.heading("White", text="White")
         tree.heading("Elo W", text="Elo W")
@@ -253,9 +282,21 @@ class ChessDatabase:
         tree.heading("Site", text="Site")
         tree.heading("Date", text="Date")
 
+        tree.column("Number", width=50, anchor="center")
+        tree.column("White", width=200, anchor="center")
+        tree.column("Elo W", width=30, anchor="center")
+        tree.column("Black", width=200, anchor="center")
+        tree.column("Elo B", width=30, anchor="center")
+        tree.column("Result", width=50, anchor="center")
+        tree.column("Site", width=200, anchor="center")
+        tree.column("Date", width=100, anchor="center")
+
         for i, (game_id, site, date, round, white, black, result, white_elo, black_elo, eco, event_date, notation) in enumerate(data):
-            tree.insert("", "end", values=(game_id, white, white_elo, black, black_elo, result, site, date))
-        
+            if i % 2 == 0:
+                tree.insert("", "end", values=(game_id, white, white_elo, black, black_elo, result, site, date), tags=("oddrow",))
+            else:
+                tree.insert("", "end", values=(game_id, white, white_elo, black, black_elo, result, site, date), tags=("evenrow",))
+
         tree.pack(side="top", fill="x")
 
         def on_item_click(event):
@@ -287,6 +328,9 @@ class ChessDatabase:
 
         tree.bind("<Double-1>", on_item_click)
 
+        tree.tag_configure("oddrow", background="#F8E7BB")
+        tree.tag_configure("evenrow", background="#EDEDED")
+
     # --- My Games --- 
     def fetch_my_games_from_database(self):
         self.cursor.execute("SELECT id, white, black, result, white_time, black_time, date FROM my_games")
@@ -298,6 +342,32 @@ class ChessDatabase:
             widget.destroy()
 
         data = self.fetch_my_games_from_database()
+
+        style = ttk.Style()
+        style.configure("Treeview.Heading",
+                        font=("Inter", 14, "bold"),
+                        background="#D9D9D9",
+                        foreground="black",
+                        anchor="center",
+                        relief="solid",
+                        bordercolor="#660000",
+                        borderwidth=2)
+
+        style.configure("Treeview",
+                        background="#F8E7BB",
+                        fieldbackground="#F8E7BB",
+                        foreground="black",
+                        rowheight=25,
+                        font=("Inter", 12))
+        
+        style.map("Treeview",
+                background=[("selected", "#F2CA5C"), ("!selected", "#F8E7BB"), ("alternate", "#EDEDED")],
+                foreground=[("selected", "black")],
+                bordercolor=[("!selected", "#000000")])
+
+        preview_label = tk.Label(table_frame, text="My games preview:", font=("Inter", 16, "bold"), bg="#970303", fg="#F2CA5C", pady=10, anchor="w")
+        preview_label.pack(side="top", fill="x")
+        
         tree = ttk.Treeview(table_frame, columns=("Number", "White", "Black", "Result", "WhiteTime", "BlackTime", "Date"), show="headings", height=15)
         
         tree.heading("Number", text="Number")
@@ -307,6 +377,14 @@ class ChessDatabase:
         tree.heading("WhiteTime", text="White Time")
         tree.heading("BlackTime", text="Black Time")
         tree.heading("Date", text="Date")
+
+        tree.column("Number", width=40, anchor="center")
+        tree.column("White", width=200, anchor="center")
+        tree.column("Black", width=200, anchor="center")
+        tree.column("Result", width=60, anchor="center")
+        tree.column("WhiteTime", width=80, anchor="center")
+        tree.column("BlackTime", width=80, anchor="center")
+        tree.column("Date", width=100, anchor="center")
 
         for i, (game_id, white, black, result, white_time, black_time, date) in enumerate(data):
             tree.insert("", "end", values=(game_id, white, black, result, white_time, black_time, date))
@@ -354,6 +432,32 @@ class ChessDatabase:
             widget.destroy()
 
         data = self.fetch_my_analyzes_from_database()
+        
+        style = ttk.Style()
+        style.configure("Treeview.Heading",
+                        font=("Inter", 14, "bold"),
+                        background="#D9D9D9",
+                        foreground="black",
+                        anchor="center",
+                        relief="solid",
+                        bordercolor="#660000",
+                        borderwidth=2)
+
+        style.configure("Treeview",
+                        background="#F8E7BB",
+                        fieldbackground="#F8E7BB",
+                        foreground="black",
+                        rowheight=25,
+                        font=("Inter", 12))
+        
+        style.map("Treeview",
+                background=[("selected", "#F2CA5C"), ("!selected", "#F8E7BB"), ("alternate", "#EDEDED")],
+                foreground=[("selected", "black")],
+                bordercolor=[("!selected", "#000000")])
+
+        preview_label = tk.Label(table_frame, text="My analyzes preview:", font=("Inter", 16, "bold"), bg="#970303", fg="#F2CA5C", pady=10, anchor="w")
+        preview_label.pack(side="top", fill="x")
+        
         tree = ttk.Treeview(table_frame, columns=("Number", "White", "White Elo", "Black", "Black Elo", "Result", "Tournament", "Date"), show="headings", height=15)
         
         tree.heading("Number", text="Number")
@@ -364,6 +468,15 @@ class ChessDatabase:
         tree.heading("Result", text="Result")
         tree.heading("Tournament", text="Tournament")
         tree.heading("Date", text="Date")
+
+        tree.column("Number", width=50, anchor="center")
+        tree.column("White", width=200, anchor="center")
+        tree.column("White Elo", width=50, anchor="center")
+        tree.column("Black", width=200, anchor="center")
+        tree.column("Black Elo", width=50, anchor="center")
+        tree.column("Result", width=70, anchor="center")
+        tree.column("Tournament", width=200, anchor="center")
+        tree.column("Date", width=100, anchor="center")
 
         for i, (game_id, white, black, result, white_elo, black_elo, tournament, date, notation) in enumerate(data):
             tree.insert("", "end", values=(game_id, white, white_elo, black, black_elo, result, tournament, date))
