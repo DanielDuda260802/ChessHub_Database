@@ -64,37 +64,30 @@ def create_play_vs_computer_button(parent_frame):
     
     return playVsComputer_btn
 
-def create_icon_with_label(parent_frame, image_path, image_size, text, command=None):
-    image = helper_methods.load_and_resize_image(image_path, image_size)
-    icon_photo = ImageTk.PhotoImage(image)
+def create_icon_with_button_and_label(parent_frame, table_frame, image_path, image_size, text, command=None, display_table_command=None):
+    icon_image = helper_methods.load_and_resize_image(image_path, image_size)
+    icon_photo = ImageTk.PhotoImage(icon_image)
+    
     frame = tk.Frame(parent_frame, bg=config.background_color)
     frame.pack(side="left", padx=30)
-    icon_button = tk.Button(frame, image=icon_photo, bg=config.background_color, borderwidth=0, command=command)
+
+    if display_table_command:
+        icon_button = tk.Button(frame, image=icon_photo, bg=config.background_color, borderwidth=0, highlightthickness=0, activebackground=config.background_color, command=lambda: display_table_command(table_frame))
+    else:
+        icon_button = tk.Button(frame, image=icon_photo, bg=config.background_color, borderwidth=0, highlightthickness=0, activebackground=config.background_color, command=command)
+    
     icon_button.image = icon_photo
     icon_button.pack(side="top")
+
     label = tk.Label(frame, text=text, bg=config.background_color, fg=config.button_text_color, font=config.label_font)
     label.pack(side="top")
-    return frame
 
-def create_icon_with_table_button_myGames(content_frame, table_frame, image_path, image_size, text):
-    icon_image = helper_methods.load_and_resize_image(image_path, image_size)
-    icon_photo = ImageTk.PhotoImage(icon_image)
-    icon_button = tk.Button(content_frame, image=icon_photo, text=text, compound="top", command=lambda: db.display_my_games(table_frame))
-    icon_button.image = icon_photo
-    icon_button.pack(side="left", padx=20)
-
-def create_icon_with_table_button(content_frame, table_frame, image_path, image_size, text):
-    icon_image = helper_methods.load_and_resize_image(image_path, image_size)
-    icon_photo = ImageTk.PhotoImage(icon_image)
-    icon_button = tk.Button(content_frame, image=icon_photo, text=text, compound="top", command=lambda: db.display_data(table_frame))
-    icon_button.image = icon_photo
-    icon_button.pack(side="left", padx=20)
+    return icon_button
 
 def initialize_data(root, loading_screen):
     db_thread = ChessDatabase()
 
     if not db_thread.database_exists_and_has_data():
-        print("Baza ne postoji ili je prazna. Pokrećem parsiranje PGN datoteke.")
         db_thread.parse_pgn_and_store_in_db(config.pgn_file_path)
         db_thread.create_tables() 
     else:
@@ -130,13 +123,12 @@ table_frame.pack(side="bottom", fill="x", expand=False)
 
 create_play_vs_computer_button(content_frame)
 create_vertical_line(content_frame)
-create_icon_with_label(content_frame, config.analysis_board_image_path, (76, 76), "Analysis board", command=open_analysis_board_window)
-create_vertical_line(content_frame)
-create_icon_with_label(content_frame, config.find_player_image_path, (94, 94), "Find Player")
+create_icon_with_button_and_label(content_frame, None, config.analysis_board_image_path, (76, 76), "Analysis board", command=open_analysis_board_window)
 create_horizontal_line(root)
 create_vertical_line(content_frame)
-create_icon_with_table_button(content_frame, table_frame, config.chessHubDatabase_image_path, (100, 100), "ChessHub Database")
+create_icon_with_button_and_label(content_frame, table_frame, config.chessHubDatabase_image_path, (100, 100), "ChessHub Database", display_table_command=db.display_data)
 create_vertical_line(content_frame)
-create_icon_with_table_button_myGames(content_frame, table_frame, config.myGames_image_path, (100, 100), "MyGames")
+create_icon_with_button_and_label(content_frame, table_frame, config.myGames_image_path, (100, 100), "MyGames", display_table_command=db.display_my_games)
+create_vertical_line(content_frame)
 
 root.mainloop()

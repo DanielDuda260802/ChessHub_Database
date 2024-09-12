@@ -242,8 +242,28 @@ class ChessDatabase:
             selected_item = tree.selection()[0]
             values = tree.item(selected_item, "values")
             game_id = values[0]
-            from main_screen import chess_board
-            chess_board.open_game_window(game_id, "games")  
+
+            self.cursor.execute('''
+                SELECT white, white_elo, black, black_elo, result, notation 
+                FROM games 
+                WHERE id = ?
+            ''', (game_id,))
+            game_data = self.cursor.fetchone()
+            
+            if game_data:
+                white, white_elo, black, black_elo, result, notation = game_data
+
+                from main_screen import analysis_board
+                analysis_board.open_analysis_board_window(
+                    notation=notation, 
+                    white=white, 
+                    white_elo=white_elo, 
+                    black=black, 
+                    black_elo=black_elo, 
+                    result=result
+                )
+            else:
+                print(f"Podaci za partiju s id {game_id} nisu pronađeni.")
 
         tree.bind("<Double-1>", on_item_click)
 
@@ -307,8 +327,28 @@ class ChessDatabase:
             selected_item = tree.selection()[0]
             values = tree.item(selected_item, "values")
             game_id = values[0]
-            from main_screen import chess_board
-            chess_board.open_game_window(game_id, "my_games")
+
+            self.cursor.execute('''
+                SELECT white, white_time, black, black_time, result, moves 
+                FROM my_games 
+                WHERE id = ?
+            ''', (game_id,))
+            game_data = self.cursor.fetchone()
+            
+            if game_data:
+                white, white_time, black, black_time, result, moves = game_data
+
+                from main_screen import analysis_board
+                analysis_board.open_analysis_board_window(
+                    notation=moves, 
+                    white=white, 
+                    white_elo=white_time, 
+                    black=black, 
+                    black_elo=black_time, 
+                    result=result
+                )
+            else:
+                print(f"Podaci za partiju s id {game_id} nisu pronađeni.")
 
         tree.bind("<Double-1>", on_item_click)
 
@@ -354,4 +394,18 @@ class ChessDatabase:
         
         return result
     
-    
+    def get_game_on_click(self, game_id):
+        conn = sqlite3.connect('/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/database/chess_db.sqlite')
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT white, white_elo, black, black_elo, result, notation 
+            FROM games 
+            WHERE id = ?
+        ''', (game_id,))
+        game_data = cursor.fetchone()
+                
+        cursor.close()
+        conn.close()
+        
+        return game_data

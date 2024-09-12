@@ -1,3 +1,4 @@
+import io
 import sys
 import tkinter as tk
 from tkinter import ttk
@@ -12,15 +13,15 @@ assets_dir = os.path.join(base_dir, "assets")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from helper import config, helper_methods, database_utils, save_analyze_screen
-from main_screen import chess_board
 
 class ChessGUI:
-    def __init__(self, root, analysisWindow, board, notation_text, nav_frame):
+    def __init__(self, root, analysisWindow, board, notation_text, nav_frame, pgn_string):
         self.board = board
         self.root = root
         self.analysisWindow = analysisWindow
         self.notation_text = notation_text
         self.nav_frame = nav_frame
+
         # PGN
         self.game = chess.pgn.Game()
         self.current_node = self.game
@@ -34,6 +35,18 @@ class ChessGUI:
         self.selected_square = None
         self.highlighted_squares = []
         self.flipped = False
+
+        if pgn_string:
+            pgn_io = io.StringIO(pgn_string)
+            game = chess.pgn.read_game(pgn_io)
+            self.game = game
+            self.board = self.game.board()  # Kreiramo ploču iz partije
+            self.current_node = self.game  # Početak partije (root node)
+            
+            # Ako želimo prikazati početni položaj ploče
+            self.update_board()  # Prikazujemo početnu poziciju ploče
+            self.update_notation()  # Učitavamo notaciju
+            self.draw_board()  # Prikazujemo ploču
 
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
@@ -199,17 +212,20 @@ class ChessGUI:
 
     def update_board(self):
         new_board = chess.Board()
-        node = self.game
+        node = self.current_node
 
-        # krećemo od korjena (početne pozicije) i prolazimo kroz sve varijante dok ne dođemo do current_node
-        while node != self.current_node:
-            for variation in node.variations:
-                if variation == self.current_node or variation.move in self.board.move_stack:
-                    node = variation
-                    new_board.push(node.move)
+        move_stack = []
+        while node.parent is not None:
+            move_stack.append(node.move)
+            node = node.parent
+        
+        move_stack.reverse()
+        for move in move_stack:
+            new_board.push(move)
+        
         self.board = new_board
         self.draw_board()
-        
+
     def prev_move(self):
         if self.current_node.parent:            
             self.current_node = self.current_node.parent
@@ -576,8 +592,25 @@ class ChessGUI:
         def on_item_double_click(event):
             selected_item = tree.selection()
             if selected_item:
-                game_data = tree.item(selected_item)["values"] 
-                chess_board.open_game_window(game_data[0], "games")
+                values = tree.item(selected_item)["values"] 
+                game_id = values[0]
+
+                game_data = chess_db.get_game_on_click(game_id)
+                
+                if game_data:
+                    white, white_elo, black, black_elo, result, notation = game_data
+
+                    from main_screen import analysis_board
+                    analysis_board.open_analysis_board_window(
+                        notation=notation, 
+                        white=white, 
+                        white_elo=white_elo, 
+                        black=black, 
+                        black_elo=black_elo, 
+                        result=result
+                    )
+                else:
+                    print(f"Podaci za partiju s id {game_id} nisu pronađeni.")
 
         tree.bind("<Double-1>", on_item_double_click)
 
@@ -734,7 +767,7 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
         chess_gui.reference()
 
 
-def open_analysis_board_window():
+def open_analysis_board_window(notation=None, white=None, white_elo=None, black=None, black_elo=None, result=None):
     analysisWindow = tk.Toplevel()
     analysisWindow.title("Analysis Board")
     screen_width, screen_height = config.get_screen_dimensions(analysisWindow)
@@ -780,6 +813,14 @@ def open_analysis_board_window():
 
     content_frames = [notation_frame, reference_frame, kibitzer_frame]
 
+    if white and white_elo and black and black_elo and result:
+        game_info_frame = tk.Frame(notation_frame, bg="#F8E7BB", pady=10)
+        game_info_frame.pack(side="top", fill="x", padx=10)
+
+        game_info_label = tk.Label(game_info_frame, text=f"{white} ({white_elo}) - {black} ({black_elo}) \n{result}",
+                                   font=("Inter", 24, "bold"), bg="#F8E7BB", fg="black", anchor="center", justify="center")
+        game_info_label.pack(side="top", fill="x", padx=10, pady=5)
+
     notation_text_height = screen_height // 50
     notation_text = tk.Text(notation_frame, font=("Inter", 16), bg="#F8E7BB", fg="#000000", wrap="word", state="disabled", relief="flat", height=notation_text_height)
     notation_text.pack(side="top", fill="x", padx=10, pady=10)
@@ -793,7 +834,7 @@ def open_analysis_board_window():
     nav_frame = tk.Frame(notation_control_frame, bg="#F8E7BB")
 
     board = chess.Board()
-    chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame)
+    chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame, pgn_string=notation)
     chess_gui.reference_frame = reference_frame
 
     promote_button = tk.Button(variation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
