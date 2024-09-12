@@ -21,7 +21,6 @@ class ChessGUI:
         self.analysisWindow = analysisWindow
         self.notation_text = notation_text
         self.nav_frame = nav_frame
-
         # PGN
         self.game = chess.pgn.Game()
         self.current_node = self.game
@@ -38,14 +37,6 @@ class ChessGUI:
 
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
-
-        self.variation_control_frame = tk.Frame(nav_frame, bg="#F8E7BB")
-        self.variation_control_frame.pack(side="top", pady=10)
-        self.promote_button = tk.Button(self.variation_control_frame, text="Promote", command=self.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-        self.delete_button = tk.Button(self.variation_control_frame, text="Delete", command=self.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-        self.demote_button = tk.Button(self.variation_control_frame, text="Demote", command=self.demote_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-
-        self.hide_variation_controls()
 
     def board_to_image(self, size):
         arrows = [chess.svg.Arrow(square, square, color="#033313") for square in self.highlighted_squares]
@@ -336,7 +327,7 @@ class ChessGUI:
         fen_parts = fen.split()
         return int(fen_parts[4]) + int(fen_parts[5])
 
-    def update_variation_controls(self):
+    def update_variation_controls(self): 
         parent_node = self.current_node.parent
         if parent_node:
             current_fen = self.current_node.board().fen()
@@ -367,15 +358,14 @@ class ChessGUI:
                     self.promote_button.pack_forget()
                     self.delete_button.pack_forget()
                     self.demote_button.pack_forget()
+
             else:
                 filtered_variations_second = []
                 for variation in self.current_node.variations:
                     temp_board = self.current_node.board().copy()
                     temp_board.push(variation.move)
-
                     variation_fen = temp_board.fen()
                     variation_half_moves = self.get_halfmove_count_from_fen(variation_fen)
-
                     if variation_half_moves == current_half_moves:
                         filtered_variations_second.append(variation)
 
@@ -493,38 +483,58 @@ class ChessGUI:
         for widget in self.reference_frame.winfo_children():
             widget.destroy()
 
+        current_fen = self.board.fen()
+        fen_hash = helper_methods.hash_fen(current_fen)
+        chess_db = database_utils.ChessDatabase()
+        games = chess_db.get_game_data_for_fen(fen_hash)   
+
+        next_moves, last_played_year, best_players_played_move = self.get_next_moves(current_fen, games)
+        sorted_next_moves = sorted(next_moves.items(), key=lambda x: x[1], reverse=True)
+
+        rows_count = len(sorted_next_moves)
+
         next_moves_info_frame = tk.Frame(self.reference_frame, bg="#F8E7BB")
         next_moves_info_frame.pack(side="top", fill="x")
 
+        style = ttk.Style()
+        
+        style.configure("Treeview.Heading", 
+                        font=("Inter", 14, "bold"), 
+                        background="#F2CA5C", 
+                        foreground="black", 
+                        anchor="center", 
+                        relief="solid", 
+                        bordercolor="#660000", 
+                        borderwidth=2)
+
+        style.configure("Treeview", 
+                        background="#D9D9D9",  
+                        fieldbackground="#D9D9D9", 
+                        foreground="black", 
+                        rowheight=25,
+                        font=("Inter", 12))
+
+        style.map("Treeview", 
+                background=[("selected", "#F2CA5C")],
+                foreground=[("selected", "black")],
+                bordercolor=[("!selected", "#000000")])
+
+        style.map("Treeview.Heading", relief=[])
+
         next_moves_columns = ('Move', 'Games', 'Score', 'Last Played', 'Best Players')
-        next_moves_tree = ttk.Treeview(next_moves_info_frame, columns=next_moves_columns, show='headings')
+        next_moves_tree = ttk.Treeview(next_moves_info_frame, columns=next_moves_columns, show='headings', height=rows_count)
+
+        column_widths = {
+            'Move': 50,
+            'Games': 20,
+            'Score': 20,
+            'Last Played': 50,
+            'Best Players': 320
+        }
 
         for col in next_moves_columns:
-            next_moves_tree.heading(col, text=col)
-            next_moves_tree.column(col, width=100)
-
-        next_moves_tree.pack(fill=tk.BOTH, expand=True)
-
-        tree_frame = tk.Frame(self.reference_frame)
-        tree_frame.pack(side="top", fill=tk.BOTH, expand=True)
-
-        columns = ('Number', 'White', 'Elo W', 'Black', 'Elo B', 'Result', 'Tournament', 'Year')
-        tree = ttk.Treeview(self.reference_frame, columns=columns, show='headings')
-
-        for col in columns:
-            tree.heading(col, text=col)
-            tree.column(col, width=100)
-
-        current_fen = self.board.fen()
-        fen_hash = helper_methods.hash_fen(current_fen)
-
-        chess_db = database_utils.ChessDatabase()
-        games = chess_db.get_game_data_for_fen(fen_hash)
-
-        next_moves, last_played_year, best_players_played_move = self.get_next_moves(current_fen, games)
-
-        # Sortiraj poteze prema broju odigranih partija (Games) silazno
-        sorted_next_moves = sorted(next_moves.items(), key=lambda x: x[1], reverse=True)
+            next_moves_tree.heading(col, text=col, anchor="center")
+            next_moves_tree.column(col, width=column_widths.get(col, 100), anchor="center")
 
         for move, count in sorted_next_moves:
             score = self.calculate_score_for_move(current_fen, move)
@@ -532,7 +542,31 @@ class ChessGUI:
             best_players = best_players_played_move.get(move, ['---', '---'])
             best_players_str = ', '.join(best_players)
             next_moves_tree.insert('', tk.END, values=(move, count, f"{score}%", last_played, best_players_str))
-        
+
+        next_moves_tree.pack(fill=tk.X, expand=False)
+
+        # Donji TreeView - Prikaz partija
+        tree_frame = tk.Frame(self.reference_frame)
+        tree_frame.pack(side="top", fill=tk.BOTH, expand=True)
+
+        columns = ('Number', 'White', 'Elo W', 'Black', 'Elo B', 'Result', 'Tournament', 'Date')
+        tree = ttk.Treeview(tree_frame, columns=columns, show='headings')
+
+        column_widths_games = {
+            'Number': 70,
+            'White': 170,
+            'Elo W': 50,
+            'Black': 170,
+            'Elo B': 50,
+            'Result': 50,
+            'Tournament': 130,
+            'Date': 100
+        }
+
+        for col in columns:
+            tree.heading(col, text=col, anchor="center")
+            tree.column(col, width=column_widths_games.get(col, 100), anchor="center")
+
         for game in games:
             game_id, white, black, white_elo, black_elo, result, event_date, site, date, notation = game
             tree.insert('', tk.END, values=(game_id, white, white_elo, black, black_elo, result, site, date))
@@ -666,11 +700,11 @@ class ChessGUI:
 
             if not is_white_to_move:
                 white_elo = white_elo if isinstance(white_elo, int) else 0
-                if (white_player) not in players:  # Provjerimo je li već na listi
+                if (white_player) not in players:
                     players.append((white_player, white_elo))
             else:
                 black_elo = black_elo if isinstance(black_elo, int) else 0
-                if (black_player) not in players:  # Provjerimo je li već na listi
+                if (black_player) not in players:
                     players.append((black_player, black_elo))
 
         players_sorted = sorted(players, key=lambda x: x[1], reverse=True)
@@ -691,12 +725,14 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
     if selected_button["text"] == "Notation" and chess_gui:
         chess_gui.notation_text.pack(fill="both", expand=True)
         chess_gui.nav_frame.pack(side="bottom", padx=20)
+        chess_gui.update_variation_controls()
     else:
         chess_gui.notation_text.pack_forget()
         chess_gui.nav_frame.pack_forget()
 
     if selected_button["text"] == "Reference" and chess_gui:
         chess_gui.reference()
+
 
 def open_analysis_board_window():
     analysisWindow = tk.Toplevel()
@@ -708,10 +744,10 @@ def open_analysis_board_window():
     board_size = min(screen_width * 0.7, screen_height * 0.9)
 
     board_frame = tk.Frame(analysisWindow, width=int(board_size), height=int(board_size), bg="#660000")
-    board_frame.pack(side="left", padx=10, pady=10, anchor="n")
+    board_frame.pack(side="left", pady=10, padx=10, anchor="n")
     board_frame.pack_propagate(0)
 
-    info_frame = tk.Frame(analysisWindow, bg="#F8E7BB", width=int(screen_width * 0.20), relief="flat", bd=10)
+    info_frame = tk.Frame(analysisWindow, bg="#F8E7BB", width=int(screen_width * 0.20), relief="flat")
     info_frame.pack(side="right", fill="both", expand=True)
 
     buttons_frame = tk.Frame(info_frame, bg="#F8E7BB")
@@ -722,7 +758,7 @@ def open_analysis_board_window():
         "bg": "#F2CA5C",  
         "fg": "#000000",  
         "width": 15,
-        "height": 2,
+        "height": 1,
         "highlightbackground": "#660000", 
         "highlightthickness": 4
     }
@@ -751,15 +787,18 @@ def open_analysis_board_window():
     notation_control_frame = tk.Frame(notation_frame, bg="#F8E7BB")
     notation_control_frame.pack(side="bottom", pady=10)
 
+    variation_control_frame = tk.Frame(notation_control_frame, bg="#F8E7BB")
+    variation_control_frame.pack(side="top", pady=10)
+
     nav_frame = tk.Frame(notation_control_frame, bg="#F8E7BB")
 
     board = chess.Board()
     chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame)
     chess_gui.reference_frame = reference_frame
 
-    promote_button = tk.Button(notation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-    delete_button = tk.Button(notation_control_frame, text="Delete", command=chess_gui.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
-    demote_button = tk.Button(notation_control_frame, text="Demote", command=chess_gui.demote_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    promote_button = tk.Button(variation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    delete_button = tk.Button(variation_control_frame, text="Delete", command=chess_gui.delete_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
+    demote_button = tk.Button(variation_control_frame, text="Demote", command=chess_gui.demote_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
 
     chess_gui.promote_button = promote_button
     chess_gui.delete_button = delete_button
