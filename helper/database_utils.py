@@ -15,7 +15,7 @@ from helper.helper_methods import hash_fen
 class ChessDatabase:
     def __init__(self):
         self.db_path = '/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/database/chess_db.sqlite'
-        self.conn = self.connect_to_database()  # Spremljena konekcija kao atribut instance
+        self.conn = self.connect_to_database()  
         if self.conn:
             self.cursor = self.conn.cursor()
             self.create_tables()
@@ -26,14 +26,12 @@ class ChessDatabase:
         try:
             os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
             conn = sqlite3.connect(self.db_path)
-            print(f"Konektiran na bazu podataka na {self.db_path}")
             return conn
         except sqlite3.Error as e:
             print(f"Greška pri povezivanju s bazom podataka: {e}")
             return None
 
     def create_tables(self):
-        # Kreiranje tablice za partije (games)
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS games (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +49,6 @@ class ChessDatabase:
             )
         ''')
 
-        # Kreiranje tablice za FEN-ove (fens), povezane putem game_id
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS fens (
                 game_id INTEGER,
@@ -75,6 +72,20 @@ class ChessDatabase:
             )
         ''')
 
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS my_analyzes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            white TEXT,
+            black TEXT,
+            result TEXT,
+            white_elo INTEGER,
+            black_elo INTEGER,
+            date TEXT,
+            tournament TEXT,
+            round TEXT,
+            notation TEXT
+        )
+        ''')
         self.conn.commit()
 
     def close_connection(self):
@@ -111,6 +122,18 @@ class ChessDatabase:
         cursor.executemany(insert_query, [
             (game_id, fen['move_number'], fen['fen'], fen['fen_hash']) for fen in fens
         ])
+    
+    def save_analysis_to_database(self, game_data):
+        insert_query = '''
+            INSERT INTO my_analyzes (white, black, result, white_elo, black_elo, date, tournament, round, notation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        '''
+        self.cursor.execute(insert_query, (
+            game_data['white'], game_data['black'], game_data['result'],
+            game_data['white_elo'], game_data['black_elo'], game_data['date'],
+            game_data['tournament'], game_data['round'], game_data['notation']
+        ))
+        self.conn.commit()
 
     def parse_pgn_and_store_in_db(self, pgn_file_path, batch_size=1000):
         conn = self.connect_to_database()

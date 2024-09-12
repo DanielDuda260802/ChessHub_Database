@@ -11,7 +11,7 @@ base_dir = os.path.dirname(__file__)
 assets_dir = os.path.join(base_dir, "assets")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from helper import config, helper_methods, database_utils
+from helper import config, helper_methods, database_utils, save_analyze_screen
 from main_screen import chess_board
 
 class ChessGUI:
@@ -823,3 +823,11 @@ def open_analysis_board_window():
     kibitzer_button.config(command=lambda: select_button(kibitzer_button, buttons, content_frames, chess_gui))
 
     select_button(notation_button, buttons, content_frames, chess_gui)
+
+    def on_closing():
+        pgn_string = chess.pgn.StringExporter(headers=False, variations=True, comments=True)  # Eksporter za PGN
+        game_pgn = chess_gui.game.accept(pgn_string)
+        save_analyze_screen.open_save_analysis_window(analysisWindow, game_pgn)
+        analysisWindow.destroy()
+
+    analysisWindow.protocol("WM_DELETE_WINDOW", on_closing)

@@ -28,10 +28,10 @@ button_font = ("Inter", 24)
 label_font = ("Inter", 16)
 
 # pgn_file_path
-pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/twic1536.pgn"
+pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/pgn/twic1536.pgn"
 
 # my_games_pgn_file_path
-my_games_pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/MyGames.pgn"
-
+my_games_pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/pgn/MyGames.pgn"
+my_analyzes_pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/pgn/MyAnalyzes.pgn"
 # Assuming Stockfish binary is available locally
 STOCKFISH_PATH = "/home/daniel/Desktop/stockfish/stockfish-ubuntu-x86-64-avx2"
