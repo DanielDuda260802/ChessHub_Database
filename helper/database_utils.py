@@ -102,7 +102,7 @@ class ChessDatabase:
 
     def save_to_gamesTable_database(self, cursor, game_data):
         insert_query = '''
-            INSERT INTO games (site, date, round, white, black, result, white_elo, black_elo, eco, event_date, notation)
+            INSERT INTO games (site, date, round, white, black, result, white_elo, black_elo, eco, event_date, move)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
         cursor.execute(insert_query, (
@@ -122,6 +122,26 @@ class ChessDatabase:
         cursor.executemany(insert_query, [
             (game_id, fen['move_number'], fen['fen'], fen['fen_hash']) for fen in fens
         ])
+    
+    def save_game_to_my_games(self, game_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO my_games (white, white_time, black, black_time, result, date, moves)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                game_data['white'],
+                game_data['white_time'],
+                game_data['black'],
+                game_data['black_time'],
+                game_data['result'],
+                game_data['date'],
+                game_data['moves']
+            ))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error saving game to my_games: {e}")
+        finally:
+            self.cursor.close()
     
     def save_analysis_to_database(self, game_data):
         insert_query = '''
@@ -268,36 +288,6 @@ class ChessDatabase:
         tree.bind("<Double-1>", on_item_click)
 
     # --- My Games --- 
-
-    def parse_my_games_pgn(self, pgn_file_path):
-        games_batch = []
-        with open(pgn_file_path, "r", encoding="ISO-8859-1") as pgn_file:
-            game = chess.pgn.read_game(pgn_file)
-            while game:
-                exporter = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
-                notation = game.accept(exporter)
-
-                game_data = {
-                    "White": game.headers.get("White", ""),
-                    "Black": game.headers.get("Black", ""),
-                    "Result": game.headers.get("Result", ""),
-                    "WhiteTime": game.headers.get("WhiteTime", ""),
-                    "BlackTime": game.headers.get("BlackTime", ""),
-                    "Date": game.headers.get("Date", ""),
-                    "Moves": notation.strip()
-                }
-
-                games_batch.append(game_data)
-                game = chess.pgn.read_game(pgn_file)
-
-            for game in games_batch:
-                self.cursor.execute('''
-                    INSERT INTO my_games (white, black, result, white_time, black_time, date, moves)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (game["White"], game["Black"], game["Result"], game["WhiteTime"], game["BlackTime"], game["Date"], game["Moves"]))
-
-        self.conn.commit()
-
     def fetch_my_games_from_database(self):
         self.cursor.execute("SELECT id, white, black, result, white_time, black_time, date FROM my_games")
         rows = self.cursor.fetchall()
@@ -352,9 +342,63 @@ class ChessDatabase:
 
         tree.bind("<Double-1>", on_item_click)
 
-    def clear_my_games_table(self):
-        self.cursor.execute('DELETE FROM my_games')
-        self.conn.commit()
+    # --- My analyzes
+
+    def fetch_my_analyzes_from_database(self):
+        self.cursor.execute("SELECT id, white, black, result, white_elo, black_elo, tournament, date, notation FROM my_analyzes")
+        rows = self.cursor.fetchall()
+        return rows
+
+    def display_my_analyzes(self, table_frame):
+        for widget in table_frame.winfo_children():
+            widget.destroy()
+
+        data = self.fetch_my_analyzes_from_database()
+        tree = ttk.Treeview(table_frame, columns=("Number", "White", "White Elo", "Black", "Black Elo", "Result", "Tournament", "Date"), show="headings", height=15)
+        
+        tree.heading("Number", text="Number")
+        tree.heading("White", text="White")
+        tree.heading("White Elo", text="White Time")
+        tree.heading("Black", text="Black")
+        tree.heading("Black Elo", text="Black Time")
+        tree.heading("Result", text="Result")
+        tree.heading("Tournament", text="Tournament")
+        tree.heading("Date", text="Date")
+
+        for i, (game_id, white, black, result, white_elo, black_elo, tournament, date, notation) in enumerate(data):
+            tree.insert("", "end", values=(game_id, white, white_elo, black, black_elo, result, tournament, date))
+        
+        tree.pack(side="top", fill="x")
+
+        def on_item_click(event):
+            selected_item = tree.selection()[0]
+            values = tree.item(selected_item, "values")
+            game_id = values[0]
+
+            self.cursor.execute('''
+                SELECT white, white_elo, black, black_elo, result, notation 
+                FROM games 
+                WHERE id = ?
+            ''', (game_id,))
+            game_data = self.cursor.fetchone()
+            
+            if game_data:
+                white, white_elo, black, black_elo, result, notation = game_data
+
+                from main_screen import analysis_board
+                analysis_board.open_analysis_board_window(
+                    notation=notation, 
+                    white=white, 
+                    white_elo=white_elo, 
+                    black=black, 
+                    black_elo=black_elo, 
+                    result=result
+                )
+            else:
+                print(f"Podaci za partiju s id {game_id} nisu pronađeni.")
+
+        tree.bind("<Double-1>", on_item_click)
+
     
     # --- Reference --- 
     def get_game_data_for_fen(self, fen):

@@ -1,5 +1,6 @@
 import io
 import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
 import chess # type: ignore
@@ -165,6 +166,7 @@ def save_analysis(entry_vars, pgn_string, save_window):
 
         pgn_file_path = config.my_analyzes_pgn_file_path
 
+
         if not os.path.exists(pgn_file_path):
             os.makedirs(pgn_file_path)
 
@@ -184,7 +186,8 @@ def save_analysis(entry_vars, pgn_string, save_window):
         }
         db.save_analysis_to_database(game_data)
 
-        save_window.destroy()
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save analysis: {e}")

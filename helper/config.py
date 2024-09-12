@@ -4,7 +4,7 @@ base_dir = os.path.dirname(os.path.dirname(__file__))
 assets_dir = os.path.join(base_dir, "assets")
 
 analysis_board_image_path = os.path.join(assets_dir, "AnalysisBoard.png")
-find_player_image_path = os.path.join(assets_dir, "FindPlayer.png")
+my_analyzes_image_path = os.path.join(assets_dir, "MyAnalyzes.png")
 chessHubDatabase_image_path = os.path.join(assets_dir, "Database.png")
 myGames_image_path = os.path.join(assets_dir, "MyGames.png")
 unchecked_image_path = os.path.join(assets_dir, "unchecked_image.png")

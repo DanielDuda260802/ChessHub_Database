@@ -15,7 +15,7 @@ base_dir = os.path.dirname(__file__)
 assets_dir = os.path.join(base_dir, "assets")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from helper import config
+from helper import config, database_utils
 import playVsComputerSetupScreen
 
 def on_resign_button_click(chess_gui, gameScreenWindow):
@@ -272,9 +272,11 @@ class ChessGUI:
         tk.Button(promotion_window, image=bishop_image, command=lambda: promote_to('b')).grid(row=0, column=2)
         tk.Button(promotion_window, image=knight_image, command=lambda: promote_to('n')).grid(row=0, column=3)
 
+        promotion_window.after(10, lambda: promotion_window.grab_set())
         promotion_window.transient(self.root)
         promotion_window.grab_set()
-        self.root.wait_window(promotion_window)
+        promotion_window.grab_release()
+        promotion_window.wait_window(promotion_window)
 
     def on_click(self, event):
         if self.game_over:
@@ -438,9 +440,28 @@ class ChessGUI:
             for move in self.board.move_stack:
                 node = node.add_main_variation(move)
 
-            pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/MyGames.pgn"
-            with open(pgn_file_path, "a") as pgn_file:
-                print(game, file=pgn_file, end="\n\n")
+            exporter = chess.pgn.StringExporter(headers=True, variations=True, comments=True)
+            pgn_string = game.accept(exporter)
+
+            game_data = {
+                'white': game.headers["White"],
+                'black': game.headers["Black"],
+                'result': game.headers["Result"],
+                'white_time': game.headers["WhiteTime"],
+                'black_time': game.headers["BlackTime"],
+                'date': game.headers["Date"],
+                'moves': pgn_string 
+            }
+
+            db = database_utils.ChessDatabase()
+            db.save_game_to_my_games(game_data)
+            db.close_connection()
+
+            self.root.quit()
+            self.root.destroy()
+
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
 
         def close_and_leave():
             """Zatvara sve prozore i ponovno pokreće aplikaciju."""
@@ -478,6 +499,7 @@ class ChessGUI:
         cancel_button.pack(side="right", padx=20, pady=20)
 
     def save_game_as_resignation(self):
+        # Kreiramo novu partiju
         game = chess.pgn.Game()
         game.headers["White"] = "User" if self.player_color == chess.WHITE else f"Stockfish - {self.level}"
         game.headers["Black"] = "User" if self.player_color == chess.BLACK else f"Stockfish - {self.level}"
@@ -486,14 +508,32 @@ class ChessGUI:
         game.headers["BlackTime"] = self.format_time(self.black_time)
         game.headers["Date"] = datetime.datetime.now().strftime("%Y.%m.%d")
 
+        # Dodavanje svih poteza u partiju
         node = game
         for move in self.board.move_stack:
             node = node.add_main_variation(move)
 
-        pgn_file_path = "/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/MyGames.pgn"
-        with open(pgn_file_path, "a") as pgn_file:
-            print(game, file=pgn_file, end="\n\n")
+        # Izvozimo notaciju partije kao string
+        exporter = chess.pgn.StringExporter(headers=True, variations=True, comments=True)
+        pgn_string = game.accept(exporter)
 
+        # Kreiramo podatke za unos u bazu
+        game_data = {
+            'white': game.headers["White"],
+            'black': game.headers["Black"],
+            'result': game.headers["Result"],
+            'white_time': game.headers["WhiteTime"],
+            'black_time': game.headers["BlackTime"],
+            'date': game.headers["Date"],
+            'moves': pgn_string  # Cijela notacija partije
+        }
+
+        # Spremanje u bazu podataka (pretpostavljamo da imate funkciju save_game_to_my_games u bazi podataka)
+        db = database_utils.ChessDatabase()
+        db.save_game_to_my_games(game_data)
+        db.close_connection()
+
+        # Zatvorimo aplikaciju
         self.root.quit()
         self.root.destroy()
 

@@ -84,20 +84,39 @@ def create_icon_with_button_and_label(parent_frame, table_frame, image_path, ima
 
     return icon_button
 
+import os
+import sqlite3
+
 def initialize_data(root, loading_screen):
-    db_thread = ChessDatabase()
+    db_path = '/home/daniel/Desktop/3.godinapreddiplomskogstudija/6.semestar/Zavrsni_Rad/ChessHub_Database/data/database/chess_db.sqlite'
 
-    if not db_thread.database_exists_and_has_data():
-        db_thread.parse_pgn_and_store_in_db(config.pgn_file_path)
-        db_thread.create_tables() 
+    def table_exists_and_not_empty(conn, table_name):
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+        if cursor.fetchone() is None:
+            return False
+        
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name};")
+        row_count = cursor.fetchone()[0]
+        return row_count > 0
+
+    if os.path.exists(db_path):
+        conn = sqlite3.connect(db_path)
+        if table_exists_and_not_empty(conn, 'games'):
+            print("Baza podataka i tablica 'games' postoje i nisu prazne.")
+        else:
+            print("Tablica 'games' ne postoji ili je prazna. Kreiram tablicu i parsiram PGN.")
+            db_thread = ChessDatabase()
+            db_thread.conn = conn
+            db_thread.parse_pgn_and_store_in_db(config.pgn_file_path)
+            db_thread.create_tables()
+            db_thread.close_connection()
     else:
-        print("Baza već postoji i sadrži podatke. Preskačem parsiranje PGN-a.")        
-
-    if os.path.exists(config.my_games_pgn_file_path):
-        db_thread.clear_my_games_table()
-        db_thread.parse_my_games_pgn(config.my_games_pgn_file_path)
-
-    db_thread.close_connection()
+        print("Baza podataka ne postoji. Kreiram novu bazu i tablice.")
+        db_thread = ChessDatabase()
+        db_thread.create_tables()
+        db_thread.parse_pgn_and_store_in_db(config.pgn_file_path)
+        db_thread.close_connection()
 
     loading_screen.destroy()
 
@@ -130,5 +149,6 @@ create_icon_with_button_and_label(content_frame, table_frame, config.chessHubDat
 create_vertical_line(content_frame)
 create_icon_with_button_and_label(content_frame, table_frame, config.myGames_image_path, (100, 100), "MyGames", display_table_command=db.display_my_games)
 create_vertical_line(content_frame)
+create_icon_with_button_and_label(content_frame, table_frame, config.my_analyzes_image_path, (100,100), "My analyzes", display_table_command=db.display_my_analyzes)
 
 root.mainloop()
