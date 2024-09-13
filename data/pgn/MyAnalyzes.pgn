@@ -1,0 +1,61 @@
+
+[Event ""]
+[Site "?"]
+[Date ".."]
+[Round ""]
+[White "ANALIZA"]
+[Black ""]
+[Result "1-0"]
+[WhiteElo ""]
+[BlackElo ""]
+
+1. e4 c5 2. Nf3 Nc6 3. d4 cxd4 4. Nxd4 g6 ( 4... d6 ) 1-0
+
+[Event ""]
+[Site "?"]
+[Date ".."]
+[Round ""]
+[White "s"]
+[Black ""]
+[Result "1-0"]
+[WhiteElo ""]
+[BlackElo ""]
+
+1. e4 1-0
+
+[Event ""]
+[Site "?"]
+[Date ".."]
+[Round ""]
+[White ""]
+[Black "sadsa"]
+[Result "1-0"]
+[WhiteElo ""]
+[BlackElo ""]
+
+1. e4 c5 1-0
+
+[Event "PRO"]
+[Site "?"]
+[Date ".."]
+[Round ""]
+[White "B"]
+[Black "A"]
+[Result "1-0"]
+[WhiteElo ""]
+[BlackElo ""]
+
+1. d4 d5 2. Nf3 1-0
+
+[Event ""]
+[Site "?"]
+[Date ".."]
+[Round ""]
+[White ""]
+[Black "Zmajevka"]
+[Result "0-1"]
+[WhiteElo ""]
+[BlackElo ""]
+
+1. e4 c5 2. Nf3 g6 3. d4 cxd4 4. Nxd4 Bg7 5. Nc3 ( 5. c4 ) 5... Nc6 0-1
+

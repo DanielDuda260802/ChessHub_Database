@@ -1,0 +1,12 @@
+[Event "?"]
+[Site "?"]
+[Date "2024.09.12"]
+[Round "?"]
+[White "User"]
+[Black "Stockfish - Level 1"]
+[Result "1-0"]
+[WhiteTime "1:29"]
+[BlackTime "2:49"]
+
+1. e4 d5 2. exd5 e6 3. dxe6 Qe7 4. Bc4 Bxe6 5. Bxe6 g6 6. Nf3 Qxe6+ 7. Qe2 Qe7 8. Nc3 Bg7 9. O-O Qxe2 10. Nxe2 Nc6 11. d4 O-O-O 12. c3 Nf6 13. Bg5 b6 14. Nf4 Rhe8 15. Rfe1 Rd6 16. Rxe8+ Nxe8 17. Re1 Kd7 18. Ne5+ Bxe5 19. dxe5 Rd2 20. e6+ fxe6 21. Nxe6 Rc2 22. Nf8+ Kc8 23. Nxh7 Kb7 24. Rxe8 Rxb2 25. Re1 Rxa2 26. h4 a5 27. Nf8 a4 28. Nxg6 Rc2 29. h5 a3 30. h6 Rb2 31. h7 Nd4 32. cxd4 Rb3 33. h8=Q b5 34. Qg8 Rb1 35. Qd5+ Kc8 36. Rxb1 c6 37. Qxc6+ Kb8 38. Ne7 a2 39. Qc7+ Ka8 40. Qc8+ Ka7 41. Nc6+ Kb6 42. Rxb5+ Kxb5 43. Qb7+ Kc4 44. Qb4+ Kd5 45. Qc5+ Ke4 46. f3+ Kd3 47. Ne5+ Ke2 48. Qc2+ Ke1 49. Qd2# 1-0
+

@@ -1,5 +1,7 @@
 import io
 import sys
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
@@ -40,13 +42,18 @@ class ChessGUI:
             pgn_io = io.StringIO(pgn_string)
             game = chess.pgn.read_game(pgn_io)
             self.game = game
-            self.board = self.game.board()  # Kreiramo ploču iz partije
-            self.current_node = self.game  # Početak partije (root node)
+            self.board = self.game.board()
+            self.current_node = self.game
             
-            # Ako želimo prikazati početni položaj ploče
-            self.update_board()  # Prikazujemo početnu poziciju ploče
-            self.update_notation()  # Učitavamo notaciju
-            self.draw_board()  # Prikazujemo ploču
+            self.update_board()
+            self.update_notation()
+            self.draw_board()
+
+        self.engine_path = config.STOCKFISH_PATH
+        self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+        self.is_kibitzer_active = False
+        self.kibitzer_thread = None
+        self.kibitzer_frame = None        
 
         self.root.after(100, self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
@@ -744,7 +751,108 @@ class ChessGUI:
         
         best_players = [player[0] for player in players_sorted[:2]]
         return best_players
+    
+    def add_kibitzer(self):
+        if not self.is_kibitzer_active:
+            print("Kibitzer is starting...")
+            self.is_kibitzer_active = True
+            self.run_kibitzer()
+        else:
+            print("Kibitzer is already active, stopping it...")
+            self.is_kibitzer_active = False 
+            self.engine.quit()
 
+    def run_kibitzer(self):
+        if self.is_kibitzer_active:
+            print("Running analysis...")
+            board_fen = self.board.fen()
+            self.analyze_position(board_fen) 
+            self.root.after(2000, self.run_kibitzer)
+        else:
+            print("Kibitzer has been stopped.")
+
+    def add_kibitzer_frame(self):
+        if not self.kibitzer_frame:
+            print("Kibitzer frame is being created...")
+
+            self.kibitzer_frame = self.content_frames[2]
+            self.kibitzer_frame.config(bg="#F8E7BB") 
+
+            self.kibitzer_info_label = tk.Label(self.kibitzer_frame, text="Powered by: Stockfish 17", font=("Inter", 14), bg="#F8E7BB")
+            self.kibitzer_info_label.pack(side="top", pady=10)
+
+            style = ttk.Style()
+            style.configure("Kibitzer.Treeview", font=("Inter", 16), rowheight=40, background="#F8E7BB", fieldbackground="#F8E7BB", borderwidth=0)
+            style.layout("Kibitzer.Treeview", [('Treeview.treearea', {'sticky': 'nswe'})]) 
+            style.configure("Kibitzer.Treeview", relief="flat", borderwidth=0)
+
+            self.kibitzer_tree = ttk.Treeview(self.kibitzer_frame, columns=("Moves", "Eval"), show='tree', style="Kibitzer.Treeview", height=20)
+            self.kibitzer_tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+            self.kibitzer_tree.column("#0", width=30, anchor="center")
+            self.kibitzer_tree.column("Moves", width=450, anchor="center")
+            self.kibitzer_tree.column("Eval", width=50, anchor="e")
+
+            self.add_kibitzer()
+
+        else:
+            print("Kibitzer frame already exists.")
+        
+        self.kibitzer_frame.lift()
+        
+    def analyze_position(self, fen):
+        board = chess.Board(fen)
+
+        try:
+            limit = chess.engine.Limit(time=2.0)
+            infos = self.engine.analyse(board, limit, multipv=5)
+
+            self.kibitzer_tree.delete(*self.kibitzer_tree.get_children())
+
+            depth = infos[0]['depth']
+            self.kibitzer_info_label.config(text=f"Powered by: Stockfish 17\nDepth: {depth}")
+
+            current_move_number = board.fullmove_number
+
+            display_text = ""
+            for i, pv_info in enumerate(infos[:5]):
+                pv_moves = pv_info["pv"]
+                score = pv_info['score'].white().score()
+
+                san_moves = []
+                move_number = current_move_number
+                halfmove_count = 0
+                moves_made = 0
+
+                for move in pv_moves[:10]:
+                    if board.turn == chess.WHITE:
+                        san_moves.append(f"{move_number}.")
+                        move_number += 1
+
+                    if move in board.legal_moves:
+                        san_moves.append(board.san(move))
+                    else:
+                        san_moves.append(move.uci())
+
+                    board.push(move)
+                    halfmove_count += 1
+                    moves_made += 1
+
+                variant_moves = ' '.join(san_moves)
+                eval_score = f"{score / 100:.2f}"
+                self.kibitzer_tree.insert('', tk.END, text=f"{i+1}.", values=(variant_moves, eval_score))
+
+                # Vraćanje poteza nazad
+                for _ in range(len(pv_moves[:10])):
+                    board.pop()
+
+            self.kibitzer_tree.update_idletasks()
+
+            print(f"Kibitzer updated: Depth {depth}, Multipv Results Shown")
+            
+        except Exception as e:
+            print(f"Error in analysis: {e}")
+    
 def select_button(selected_button, buttons, content_frames, chess_gui=None):
     for button in buttons:
         button.config(font=("Inter", 24, "normal"))
@@ -765,6 +873,19 @@ def select_button(selected_button, buttons, content_frames, chess_gui=None):
 
     if selected_button["text"] == "Reference" and chess_gui:
         chess_gui.reference()
+    
+    if selected_button["text"] == "Add Kibitzer" and chess_gui:
+        print("Add Kibitzer selected")
+        chess_gui.add_kibitzer_frame()
+        if not chess_gui.is_kibitzer_active:
+            chess_gui.engine = chess.engine.SimpleEngine.popen_uci(chess_gui.engine_path)
+            chess_gui.add_kibitzer() 
+        else:
+            chess_gui.add_kibitzer_frame()
+    else:
+        if chess_gui.is_kibitzer_active:
+            chess_gui.is_kibitzer_active = False
+            chess_gui.engine.quit()
 
 
 def open_analysis_board_window(notation=None, white=None, white_elo=None, black=None, black_elo=None, result=None):
@@ -835,6 +956,7 @@ def open_analysis_board_window(notation=None, white=None, white_elo=None, black=
 
     board = chess.Board()
     chess_gui = ChessGUI(board_frame, analysisWindow, board, notation_text, nav_frame, pgn_string=notation)
+    chess_gui.content_frames = content_frames
     chess_gui.reference_frame = reference_frame
 
     promote_button = tk.Button(variation_control_frame, text="Promote", command=chess_gui.promote_to_main_variation, font=("Inter", 20), bg="#F2CA5C", fg="#000000")
